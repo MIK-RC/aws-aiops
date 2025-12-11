@@ -1,0 +1,42 @@
+# ============================================
+# Global Settings Configuration
+# ============================================
+
+aws:
+  region: "us-east-1"
+  # Bedrock endpoint (optional, uses default if not specified)
+  bedrock_endpoint: null
+
+session:
+  # S3 bucket for storing agent sessions/memory
+  bucket: "aiops-agent-sessions"
+  prefix: "sessions/"
+  # Session TTL in seconds (7 days)
+  ttl: 604800
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  # Enable JSON logging for production
+  json_format: false
+
+# Cron job settings
+cron:
+  # Time range for log queries (supports DataDog time syntax)
+  default_time_from: "now-1d"
+  default_time_to: "now"
+  # Schedule expression (daily at 6 AM UTC)
+  schedule: "cron(0 6 * * ? *)"
+
+# Rate limiting and safety
+rate_limits:
+  max_agent_iterations: 20
+  max_handoffs: 15
+  execution_timeout_seconds: 900
+  node_timeout_seconds: 300
+
+# Feature flags
+features:
+  enable_ticket_creation: true
+  enable_notifications: false
+  dry_run_mode: false
