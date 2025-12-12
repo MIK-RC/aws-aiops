@@ -9,6 +9,11 @@ import argparse
 import json
 import sys
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from .agents import OrchestratorAgent, DataDogAgent, CodingAgent, ServiceNowAgent
 from .workflows import AIOpsSwarm, run_daily_analysis
 from .utils.logging_config import setup_logging, get_logger

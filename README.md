@@ -52,8 +52,7 @@ This system transforms traditional AIOps workflows into an intelligent multi-age
 ### Prerequisites
 
 - Python 3.12+
-- AWS CLI configured with appropriate permissions
-- Access to Amazon Bedrock (Claude models)
+- AWS account with Bedrock access (Claude models enabled)
 - DataDog API credentials
 - ServiceNow instance credentials
 
@@ -73,36 +72,48 @@ pip install -r requirements.txt
 
 # For development
 pip install -r requirements-dev.txt
+
+# Set up your environment
+cp .env.example .env
+# Edit .env with your credentials
 ```
 
 ### Configuration
 
-1. **Set environment variables:**
+1. **Create your `.env` file from the template:**
 
 ```bash
-export AWS_REGION=us-east-1
-export DATADOG_API_KEY=your-api-key
-export DATADOG_APP_KEY=your-app-key
-export SERVICENOW_INSTANCE=your-instance.service-now.com
-export SERVICENOW_USER=your-username
-export SERVICENOW_PASS=your-password
+cp .env.example .env
 ```
 
-2. **Or use a `.env` file:**
+2. **Edit `.env` with your credentials:**
 
 ```env
-AWS_REGION=us-east-1
-DATADOG_API_KEY=your-api-key
-DATADOG_APP_KEY=your-app-key
+# AWS Credentials
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_DEFAULT_REGION=us-east-1
+
+# Default Bedrock Model (optional - overrides config/agents.yaml)
+# BEDROCK_MODEL=global.anthropic.claude-haiku-4-5-20251001-v1:0
+
+# DataDog Credentials
+DATADOG_API_KEY=your-datadog-api-key
+DATADOG_APP_KEY=your-datadog-app-key
+DATADOG_SITE=us5
+
+# ServiceNow Credentials
 SERVICENOW_INSTANCE=your-instance.service-now.com
 SERVICENOW_USER=your-username
 SERVICENOW_PASS=your-password
 ```
 
-3. **Customize configuration** in `config/` directory:
-   - `settings.yaml`: Global settings, AWS region, session storage
+3. **Customize agent configuration** in `config/` directory (optional):
+   - `settings.yaml`: Global settings, session storage, rate limits
    - `agents.yaml`: Agent prompts, model IDs, behavior
    - `tools.yaml`: Tool-specific settings (API endpoints, limits)
+
+> **Note:** The `.env` file is automatically loaded by the application. Never commit your `.env` file to version control!
 
 ## Usage
 
@@ -347,11 +358,17 @@ datadog:
 
 ## Environment Variables
 
+All environment variables can be set in a `.env` file (copy from `.env.example`).
+
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `AWS_REGION` | No | AWS region (default: us-east-1) |
+| `AWS_ACCESS_KEY_ID` | Yes | AWS access key ID |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret access key |
+| `AWS_DEFAULT_REGION` | No | AWS region (default: us-east-1) |
+| `BEDROCK_MODEL` | No | Override default Bedrock model ID |
 | `DATADOG_API_KEY` | Yes | DataDog API key |
 | `DATADOG_APP_KEY` | Yes | DataDog Application key |
+| `DATADOG_SITE` | No | DataDog site (default: us5) |
 | `SERVICENOW_INSTANCE` | Yes | ServiceNow instance URL |
 | `SERVICENOW_USER` | Yes | ServiceNow username |
 | `SERVICENOW_PASS` | Yes | ServiceNow password |

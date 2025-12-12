@@ -12,6 +12,10 @@ import sys
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+# Load environment variables from .env file (for local testing)
+from dotenv import load_dotenv
+load_dotenv()
+
 from bedrock_agentcore import BedrockAgentCoreApp
 
 from src.agents import OrchestratorAgent

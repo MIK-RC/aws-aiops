@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# Load .env file automatically
+# Looks for .env in current directory and parent directories
+load_dotenv()
 
 
 class AWSConfig(BaseModel):
@@ -302,7 +307,20 @@ class ConfigLoader:
         agents = self.agents
         
         if hasattr(agents, agent_name):
-            return getattr(agents, agent_name)
+            config = getattr(agents, agent_name)
+            
+            # Allow BEDROCK_MODEL env var to override the model_id
+            env_model = os.environ.get("BEDROCK_MODEL")
+            if env_model:
+                config = AgentConfig(
+                    name=config.name,
+                    description=config.description,
+                    model_id=env_model,
+                    max_tokens=config.max_tokens,
+                    system_prompt=config.system_prompt,
+                )
+            
+            return config
         
         raise ValueError(f"Unknown agent: {agent_name}")
     
