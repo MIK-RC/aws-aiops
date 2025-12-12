@@ -120,10 +120,10 @@ The primary way to interact with the system is through the FastAPI server:
 
 ```bash
 # Start the API server
-uvicorn src.api.app:app --host 0.0.0.0 --port 8000
+python src/api/app.py
 
-# With auto-reload for development
-uvicorn src.api.app:app --reload
+# Or with uvicorn (more control)
+uvicorn src.api.app:app --reload --port 8000
 ```
 
 **API Endpoint:**
@@ -132,7 +132,7 @@ uvicorn src.api.app:app --reload
 # Send a message to the orchestrator
 curl -X POST http://localhost:8000/invoke \
   -H "Content-Type: application/json" \
-  -d '{"message": "Analyze errors in the payment service for the last 24 hours"}'
+  -d '{"message": "Analyze errors in the payment service"}'
 
 # Response:
 # {
@@ -146,7 +146,7 @@ curl -X POST http://localhost:8000/invoke \
   -d '{"message": "Create a ticket for the critical issues", "session_id": "sess-a1b2c3d4"}'
 ```
 
-**Interactive API Docs:** Visit `http://localhost:8000/docs` for Swagger UI.
+**API Docs:** `http://localhost:8000/docs`
 
 ### Command Line Interface
 
@@ -284,8 +284,7 @@ aiops-multi-agent/
 │
 ├── src/                        # Source code
 │   ├── api/                    # FastAPI application
-│   │   ├── app.py              # Main API server
-│   │   └── schemas.py          # Request/Response models
+│   │   └── app.py              # API server
 │   │
 │   ├── agents/                 # Agent implementations
 │   │   ├── base.py             # BaseAgent class
