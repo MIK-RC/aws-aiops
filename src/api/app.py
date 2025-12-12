@@ -4,15 +4,21 @@ FastAPI Application
 Simple API for the AIOps Orchestrator Agent.
 """
 
+import sys
 import uuid
+from pathlib import Path
+
+# Add project root to path for direct script execution
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
 load_dotenv()
 
-from ..agents import OrchestratorAgent
-from ..utils.logging_config import setup_logging, get_logger
+from src.agents import OrchestratorAgent
+from src.utils.logging_config import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger("api")
