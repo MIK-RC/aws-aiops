@@ -12,6 +12,10 @@ from .datadog_agent import DataDogAgent
 from .coding_agent import CodingAgent
 from .servicenow_agent import ServiceNowAgent
 from ..utils.config_loader import get_config
+from ..utils.logging_config import get_logger
+
+# Module-level logger for use before instance is initialized
+_module_logger = get_logger("agents.orchestrator")
 
 
 class OrchestratorAgent(BaseAgent):
@@ -93,8 +97,8 @@ class OrchestratorAgent(BaseAgent):
             session_manager=session_manager,
         )
     
+    @staticmethod
     def _create_session_manager(
-        self,
         session_id: str,
         use_s3: bool,
         s3_bucket: str | None,
@@ -103,12 +107,12 @@ class OrchestratorAgent(BaseAgent):
     ):
         """Create the appropriate session manager."""
         config = get_config().settings.session
-        
+
         if use_s3:
             bucket = s3_bucket or config.bucket
             prefix = s3_prefix or config.prefix
-            
-            self._logger.info(f"Using S3 session storage: s3://{bucket}/{prefix}")
+
+            _module_logger.info(f"Using S3 session storage: s3://{bucket}/{prefix}")
             return S3SessionManager(
                 session_id=session_id,
                 bucket=bucket,
@@ -116,7 +120,7 @@ class OrchestratorAgent(BaseAgent):
             )
         else:
             directory = storage_dir or "./sessions"
-            self._logger.info(f"Using file session storage: {directory}")
+            _module_logger.info(f"Using file session storage: {directory}")
             return FileSessionManager(
                 session_id=session_id,
                 storage_dir=directory,
