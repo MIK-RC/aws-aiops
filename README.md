@@ -114,6 +114,40 @@ SERVICENOW_PASS=your-password
 
 ## Usage
 
+### API Server (Recommended)
+
+The primary way to interact with the system is through the FastAPI server:
+
+```bash
+# Start the API server
+uvicorn src.api.app:app --host 0.0.0.0 --port 8000
+
+# With auto-reload for development
+uvicorn src.api.app:app --reload
+```
+
+**API Endpoint:**
+
+```bash
+# Send a message to the orchestrator
+curl -X POST http://localhost:8000/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Analyze errors in the payment service for the last 24 hours"}'
+
+# Response:
+# {
+#   "response": "I analyzed the payment service logs...",
+#   "session_id": "sess-a1b2c3d4"
+# }
+
+# Continue the conversation using the session_id
+curl -X POST http://localhost:8000/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Create a ticket for the critical issues", "session_id": "sess-a1b2c3d4"}'
+```
+
+**Interactive API Docs:** Visit `http://localhost:8000/docs` for Swagger UI.
+
 ### Command Line Interface
 
 ```bash
@@ -245,10 +279,14 @@ aws events put-rule \
 aiops-multi-agent/
 ├── config/                     # YAML configuration files
 │   ├── settings.yaml           # Global settings
-│   ├── agents.yaml             # Agent configurations
+│   ├── agents.yaml             # Agent configurations & prompts
 │   └── tools.yaml              # Tool configurations
 │
 ├── src/                        # Source code
+│   ├── api/                    # FastAPI application
+│   │   ├── app.py              # Main API server
+│   │   └── schemas.py          # Request/Response models
+│   │
 │   ├── agents/                 # Agent implementations
 │   │   ├── base.py             # BaseAgent class
 │   │   ├── orchestrator.py     # OrchestratorAgent
@@ -256,7 +294,7 @@ aiops-multi-agent/
 │   │   ├── coding_agent.py     # CodingAgent
 │   │   └── servicenow_agent.py # ServiceNowAgent
 │   │
-│   ├── tools/                  # Tool implementations
+│   ├── tools/                  # Tool implementations (standalone)
 │   │   ├── datadog_tools.py    # DataDog API tools
 │   │   ├── servicenow_tools.py # ServiceNow API tools
 │   │   └── code_analysis_tools.py # Code analysis tools
@@ -349,6 +387,8 @@ datadog:
 | strands-agents | 1.19.0 | Core agent framework |
 | boto3 | >=1.35.0 | AWS SDK |
 | bedrock-agentcore | >=0.1.0 | AgentCore runtime |
+| fastapi | >=0.115.0 | API framework |
+| uvicorn | >=0.32.0 | ASGI server |
 | pydantic | >=2.4.0 | Data validation |
 | PyYAML | >=6.0.1 | Configuration |
 | requests | >=2.31.0 | HTTP client |
