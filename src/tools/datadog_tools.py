@@ -6,8 +6,6 @@ These tools can be used standalone or as part of the DataDog Agent.
 """
 
 import os
-from typing import Optional
-
 import requests
 from strands import tool
 
@@ -38,9 +36,9 @@ class DataDogClient:
     
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        app_key: Optional[str] = None,
-        site: Optional[str] = None,
+        api_key: str | None = None,
+        app_key: str | None = None,
+        site: str | None = None,
     ):
         """
         Initialize the DataDog client.
@@ -76,8 +74,8 @@ class DataDogClient:
         self,
         time_from: str = "now-1d",
         time_to: str = "now",
-        query: Optional[str] = None,
-        limit: Optional[int] = None,
+        query: str | None = None,
+        limit: int | None = None,
     ) -> list[dict]:
         """
         Query logs from DataDog.
@@ -158,8 +156,8 @@ class DataDogClient:
     def format_logs(
         self,
         logs: list[dict],
-        service: Optional[str] = None,
-        max_logs: Optional[int] = None,
+        service: str | None = None,
+        max_logs: int | None = None,
     ) -> str:
         """
         Format logs for LLM analysis.
@@ -212,7 +210,7 @@ class DataDogClient:
 
 
 # Create a default client instance for tool functions
-_default_client: Optional[DataDogClient] = None
+_default_client: DataDogClient | None = None
 
 
 def _get_client() -> DataDogClient:

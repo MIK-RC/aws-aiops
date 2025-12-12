@@ -4,8 +4,6 @@ API Schemas
 Pydantic models for request and response validation.
 """
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -18,7 +16,7 @@ class InvokeRequest(BaseModel):
         min_length=1,
         examples=["Analyze errors in the payment service for the last 24 hours"],
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         description="Optional session ID for conversation continuity. "
                     "If not provided, a new session will be created.",
@@ -64,7 +62,7 @@ class ErrorResponse(BaseModel):
         ...,
         description="Error message describing what went wrong.",
     )
-    detail: Optional[str] = Field(
+    detail: str | None = Field(
         default=None,
         description="Additional error details.",
     )

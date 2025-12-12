@@ -7,7 +7,7 @@ Supports environment variable overrides and provides type-safe access to config 
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -21,7 +21,7 @@ load_dotenv()
 class AWSConfig(BaseModel):
     """AWS-specific configuration."""
     region: str = "us-east-1"
-    bedrock_endpoint: Optional[str] = None
+    bedrock_endpoint: str | None = None
 
 
 class SessionConfig(BaseModel):
@@ -141,16 +141,16 @@ class ConfigLoader:
         orchestrator_config = config.get_agent_config("orchestrator")
     """
     
-    _instance: Optional["ConfigLoader"] = None
+    _instance: "ConfigLoader | None" = None
     
-    def __new__(cls, config_dir: Optional[str] = None) -> "ConfigLoader":
+    def __new__(cls, config_dir: str | None = None) -> "ConfigLoader":
         """Singleton pattern - return existing instance if available."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self, config_dir: Optional[str] = None):
+    def __init__(self, config_dir: str | None = None):
         """
         Initialize the configuration loader.
         
@@ -167,13 +167,13 @@ class ConfigLoader:
         self._load_all_configs()
         
         # Parse into typed models
-        self._settings: Optional[SettingsConfig] = None
-        self._agents: Optional[AgentsConfig] = None
-        self._tools: Optional[ToolsConfig] = None
+        self._settings: SettingsConfig | None = None
+        self._agents: AgentsConfig | None = None
+        self._tools: ToolsConfig | None = None
         
         self._initialized = True
     
-    def _resolve_config_dir(self, config_dir: Optional[str]) -> Path:
+    def _resolve_config_dir(self, config_dir: str | None) -> Path:
         """Resolve the configuration directory path."""
         if config_dir:
             return Path(config_dir)
@@ -325,7 +325,7 @@ class ConfigLoader:
 
 
 # Global config instance getter
-def get_config(config_dir: Optional[str] = None) -> ConfigLoader:
+def get_config(config_dir: str | None = None) -> ConfigLoader:
     """
     Get the global configuration loader instance.
     

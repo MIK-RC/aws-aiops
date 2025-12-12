@@ -5,8 +5,6 @@ Specialist agent for error analysis and code fix suggestions.
 Can be used standalone or as part of the multi-agent swarm.
 """
 
-from typing import Any, Optional
-
 from .base import BaseAgent
 from ..tools.code_analysis_tools import (
     analyze_error_patterns,
@@ -44,8 +42,8 @@ class CodingAgent(BaseAgent):
     
     def __init__(
         self,
-        model_id: Optional[str] = None,
-        region: Optional[str] = None,
+        model_id: str | None = None,
+        region: str | None = None,
     ):
         """
         Initialize the Coding Agent.

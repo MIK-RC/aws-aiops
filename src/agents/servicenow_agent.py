@@ -5,8 +5,6 @@ Specialist agent for managing ServiceNow incidents.
 Can be used standalone or as part of the multi-agent swarm.
 """
 
-from typing import Any, Optional
-
 from .base import BaseAgent
 from ..tools.servicenow_tools import (
     create_incident,
@@ -47,11 +45,11 @@ class ServiceNowAgent(BaseAgent):
     
     def __init__(
         self,
-        model_id: Optional[str] = None,
-        region: Optional[str] = None,
-        instance: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        model_id: str | None = None,
+        region: str | None = None,
+        instance: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
         """
         Initialize the ServiceNow Agent.
@@ -93,9 +91,9 @@ class ServiceNowAgent(BaseAgent):
         title: str,
         description: str,
         priority: str = "medium",
-        category: Optional[str] = None,
-        assignment_group: Optional[str] = None,
-        extra_fields: Optional[dict] = None,
+        category: str | None = None,
+        assignment_group: str | None = None,
+        extra_fields: dict | None = None,
     ) -> dict:
         """
         Create a ServiceNow incident ticket directly.
@@ -142,10 +140,10 @@ class ServiceNowAgent(BaseAgent):
     def update_ticket(
         self,
         ticket_id: str,
-        work_notes: Optional[str] = None,
-        state: Optional[str] = None,
-        resolution_notes: Optional[str] = None,
-        extra_updates: Optional[dict] = None,
+        work_notes: str | None = None,
+        state: str | None = None,
+        resolution_notes: str | None = None,
+        extra_updates: dict | None = None,
     ) -> dict:
         """
         Update an existing ServiceNow ticket.

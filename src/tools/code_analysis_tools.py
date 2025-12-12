@@ -6,8 +6,6 @@ These tools can be used standalone or as part of the Coding Agent.
 """
 
 import re
-from typing import Optional
-
 from strands import tool
 
 from ..utils.config_loader import get_config
@@ -344,7 +342,7 @@ class TokenBucket:
 
 
 # Create a default analyzer instance
-_default_analyzer: Optional[CodeAnalyzer] = None
+_default_analyzer: CodeAnalyzer | None = None
 
 
 def _get_analyzer() -> CodeAnalyzer:

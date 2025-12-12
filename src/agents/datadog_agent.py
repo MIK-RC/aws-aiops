@@ -5,8 +5,6 @@ Specialist agent for fetching and analyzing logs from DataDog.
 Can be used standalone or as part of the multi-agent swarm.
 """
 
-from typing import Any, Optional
-
 from .base import BaseAgent
 from ..tools.datadog_tools import (
     query_logs,
@@ -44,11 +42,11 @@ class DataDogAgent(BaseAgent):
     
     def __init__(
         self,
-        model_id: Optional[str] = None,
-        region: Optional[str] = None,
-        api_key: Optional[str] = None,
-        app_key: Optional[str] = None,
-        datadog_site: Optional[str] = None,
+        model_id: str | None = None,
+        region: str | None = None,
+        api_key: str | None = None,
+        app_key: str | None = None,
+        datadog_site: str | None = None,
     ):
         """
         Initialize the DataDog Agent.
@@ -141,7 +139,7 @@ class DataDogAgent(BaseAgent):
     def format_logs(
         self,
         logs: list[dict],
-        service: Optional[str] = None,
+        service: str | None = None,
         max_logs: int = 30,
     ) -> str:
         """

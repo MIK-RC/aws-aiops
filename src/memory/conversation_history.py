@@ -6,9 +6,9 @@ Provides utilities for storing, retrieving, and summarizing conversations.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,14 +19,14 @@ logger = get_logger("memory.conversation")
 
 class ConversationEntry(BaseModel):
     """A single entry in the conversation history."""
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     role: str  # "user", "assistant", "system"
     content: str
     metadata: dict = Field(default_factory=dict)
-    
+
     # Optional fields for tracking agent actions
-    agent_name: Optional[str] = None
-    action_type: Optional[str] = None
+    agent_name: str | None = None
+    action_type: str | None = None
     tokens_used: int = 0
 
 
@@ -57,7 +57,7 @@ class ConversationHistory:
     def __init__(
         self,
         session_id: str,
-        storage_path: Optional[str] = None,
+        storage_path: str | None = None,
         max_entries: int = 100,
         auto_save: bool = True,
     ):
@@ -105,9 +105,9 @@ class ConversationHistory:
         self,
         role: str,
         content: str,
-        agent_name: Optional[str] = None,
-        action_type: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        agent_name: str | None = None,
+        action_type: str | None = None,
+        metadata: dict | None = None,
         tokens_used: int = 0,
     ) -> None:
         """
@@ -141,16 +141,16 @@ class ConversationHistory:
         
         logger.debug(f"Added {role} entry to conversation {self._session_id}")
     
-    def add_user_message(self, content: str, metadata: Optional[dict] = None) -> None:
+    def add_user_message(self, content: str, metadata: dict | None = None) -> None:
         """Add a user message."""
         self.add_entry(role="user", content=content, metadata=metadata)
     
     def add_assistant_message(
         self,
         content: str,
-        agent_name: Optional[str] = None,
-        action_type: Optional[str] = None,
-        metadata: Optional[dict] = None,
+        agent_name: str | None = None,
+        action_type: str | None = None,
+        metadata: dict | None = None,
         tokens_used: int = 0,
     ) -> None:
         """Add an assistant message."""
@@ -163,13 +163,13 @@ class ConversationHistory:
             tokens_used=tokens_used,
         )
     
-    def add_system_message(self, content: str, metadata: Optional[dict] = None) -> None:
+    def add_system_message(self, content: str, metadata: dict | None = None) -> None:
         """Add a system message."""
         self.add_entry(role="system", content=content, metadata=metadata)
     
     def get_context(
         self,
-        max_entries: Optional[int] = None,
+        max_entries: int | None = None,
         max_chars: int = 10000,
         include_system: bool = True,
     ) -> str:
@@ -220,7 +220,7 @@ class ConversationHistory:
     
     def get_messages_for_llm(
         self,
-        max_entries: Optional[int] = None,
+        max_entries: int | None = None,
     ) -> list[dict]:
         """
         Get conversation entries in LLM message format.
@@ -305,7 +305,7 @@ class ConversationHistory:
             
             data = {
                 "session_id": self._session_id,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "entries": [entry.model_dump() for entry in self._entries],
             }
             
@@ -340,7 +340,7 @@ class ConversationHistory:
         """
         return {
             "session_id": self._session_id,
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
             "entry_count": len(self._entries),
             "entries": [entry.model_dump() for entry in self._entries],
         }

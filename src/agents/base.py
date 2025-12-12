@@ -7,8 +7,8 @@ Contains shared functionality for initialization, logging, and action tracking.
 
 import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import BaseModel, Field
 from strands import Agent
@@ -18,9 +18,14 @@ from ..utils.config_loader import get_config, AgentConfig
 from ..utils.logging_config import get_logger
 
 
+def _utc_now_iso() -> str:
+    """Get current UTC time as ISO string."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 class AgentAction(BaseModel):
     """Record of a single agent action."""
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = Field(default_factory=_utc_now_iso)
     action_type: str
     description: str
     input_summary: str = ""
@@ -34,8 +39,8 @@ class AgentState(BaseModel):
     """State tracking for an agent instance."""
     agent_id: str
     agent_name: str
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    last_activity: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = Field(default_factory=_utc_now_iso)
+    last_activity: str = Field(default_factory=_utc_now_iso)
     action_history: list[AgentAction] = Field(default_factory=list)
     total_invocations: int = 0
     successful_invocations: int = 0
@@ -68,10 +73,10 @@ class BaseAgent(ABC):
     def __init__(
         self,
         agent_type: str,
-        custom_config: Optional[AgentConfig] = None,
-        model_id: Optional[str] = None,
-        region: Optional[str] = None,
-        session_manager: Optional[Any] = None,
+        custom_config: AgentConfig | None = None,
+        model_id: str | None = None,
+        region: str | None = None,
+        session_manager: Any | None = None,
     ):
         """
         Initialize the base agent.
@@ -131,7 +136,7 @@ class BaseAgent(ABC):
             f"Initialized {self._config.name} with model {effective_model_id}"
         )
     
-    def _create_agent(self, session_manager: Optional[Any] = None) -> Agent:
+    def _create_agent(self, session_manager: Any | None = None) -> Agent:
         """
         Create the Strands Agent instance.
         
@@ -233,7 +238,7 @@ class BaseAgent(ABC):
         )
         
         self._state.action_history.append(action)
-        self._state.last_activity = datetime.utcnow().isoformat()
+        self._state.last_activity = datetime.now(timezone.utc).isoformat()
         
         if success:
             self._state.successful_invocations += 1

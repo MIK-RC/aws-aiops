@@ -7,8 +7,6 @@ Supports S3 and file-based storage backends.
 
 import os
 from enum import Enum
-from typing import Optional
-
 from strands.session import S3SessionManager, FileSessionManager, SessionManager
 
 from ..utils.config_loader import get_config
@@ -52,11 +50,11 @@ class SessionManagerFactory:
     @staticmethod
     def create(
         session_id: str,
-        backend: Optional[StorageBackend] = None,
-        bucket: Optional[str] = None,
-        prefix: Optional[str] = None,
-        storage_dir: Optional[str] = None,
-        region: Optional[str] = None,
+        backend: StorageBackend | None = None,
+        bucket: str | None = None,
+        prefix: str | None = None,
+        storage_dir: str | None = None,
+        region: str | None = None,
     ) -> SessionManager:
         """
         Create a session manager.
@@ -138,7 +136,7 @@ class SessionManagerFactory:
 
 def get_session_manager(
     session_id: str,
-    use_s3: Optional[bool] = None,
+    use_s3: bool | None = None,
     **kwargs,
 ) -> SessionManager:
     """

@@ -5,8 +5,6 @@ Central coordinator agent that manages all specialist agents and user interactio
 Maintains conversation history and generates comprehensive reports.
 """
 
-from typing import Any, Optional
-
 from strands.session import S3SessionManager, FileSessionManager
 
 from .base import BaseAgent, AgentAction
@@ -49,13 +47,13 @@ class OrchestratorAgent(BaseAgent):
     
     def __init__(
         self,
-        model_id: Optional[str] = None,
-        region: Optional[str] = None,
-        session_id: Optional[str] = None,
+        model_id: str | None = None,
+        region: str | None = None,
+        session_id: str | None = None,
         use_s3_storage: bool = False,
-        s3_bucket: Optional[str] = None,
+        s3_bucket: str | None = None,
         s3_prefix: str = "sessions/",
-        storage_dir: Optional[str] = None,
+        storage_dir: str | None = None,
     ):
         """
         Initialize the Orchestrator Agent.
@@ -81,9 +79,9 @@ class OrchestratorAgent(BaseAgent):
             )
         
         # Initialize specialist agents (lazy loaded)
-        self._datadog_agent: Optional[DataDogAgent] = None
-        self._coding_agent: Optional[CodingAgent] = None
-        self._servicenow_agent: Optional[ServiceNowAgent] = None
+        self._datadog_agent: DataDogAgent | None = None
+        self._coding_agent: CodingAgent | None = None
+        self._servicenow_agent: ServiceNowAgent | None = None
         
         # Store all agent reports for final summary
         self._agent_reports: list[dict] = []
@@ -99,9 +97,9 @@ class OrchestratorAgent(BaseAgent):
         self,
         session_id: str,
         use_s3: bool,
-        s3_bucket: Optional[str],
+        s3_bucket: str | None,
         s3_prefix: str,
-        storage_dir: Optional[str],
+        storage_dir: str | None,
     ):
         """Create the appropriate session manager."""
         config = get_config().settings.session

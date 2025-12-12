@@ -5,8 +5,6 @@ Implements multi-agent coordination using the Strands SDK Swarm pattern.
 Enables autonomous collaboration between DataDog, Coding, and ServiceNow agents.
 """
 
-from typing import Any, Optional
-
 from strands import Agent
 from strands.multiagent import Swarm
 
@@ -42,8 +40,8 @@ class AIOpsSwarm:
     
     def __init__(
         self,
-        model_id: Optional[str] = None,
-        region: Optional[str] = None,
+        model_id: str | None = None,
+        region: str | None = None,
         max_handoffs: int = 15,
         max_iterations: int = 20,
         execution_timeout: float = 900.0,
@@ -117,7 +115,7 @@ class AIOpsSwarm:
     def run(
         self,
         task: str,
-        start_agent: Optional[str] = None,
+        start_agent: str | None = None,
     ) -> "SwarmResult":
         """
         Run a task through the swarm.
@@ -175,7 +173,7 @@ class AIOpsSwarm:
     async def run_async(
         self,
         task: str,
-        start_agent: Optional[str] = None,
+        start_agent: str | None = None,
     ) -> "SwarmResult":
         """
         Asynchronously run a task through the swarm.

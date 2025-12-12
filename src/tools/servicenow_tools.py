@@ -6,8 +6,6 @@ These tools can be used standalone or as part of the ServiceNow Agent.
 """
 
 import os
-from typing import Optional
-
 import requests
 from strands import tool
 
@@ -41,9 +39,9 @@ class ServiceNowClient:
     
     def __init__(
         self,
-        instance: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        instance: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
         """
         Initialize the ServiceNow client.
@@ -115,9 +113,9 @@ class ServiceNowClient:
         short_description: str,
         description: str,
         priority: str = "medium",
-        category: Optional[str] = None,
-        assignment_group: Optional[str] = None,
-        extra: Optional[dict] = None,
+        category: str | None = None,
+        assignment_group: str | None = None,
+        extra: dict | None = None,
     ) -> dict:
         """
         Create a new incident in ServiceNow.
@@ -265,7 +263,7 @@ class ServiceNowClient:
 
 
 # Create a default client instance for tool functions
-_default_client: Optional[ServiceNowClient] = None
+_default_client: ServiceNowClient | None = None
 
 
 def _get_client() -> ServiceNowClient:

@@ -7,8 +7,6 @@ The orchestrator handles all user requests intelligently based on natural langua
 
 import uuid
 from contextlib import asynccontextmanager
-from typing import Dict
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +23,7 @@ setup_logging()
 logger = get_logger("api.app")
 
 # Store active orchestrator sessions
-_sessions: Dict[str, OrchestratorAgent] = {}
+_sessions: dict[str, OrchestratorAgent] = {}
 
 
 def get_or_create_session(session_id: str | None) -> tuple[OrchestratorAgent, str]:

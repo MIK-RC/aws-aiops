@@ -9,8 +9,6 @@ import json
 import logging
 import sys
 from datetime import datetime
-from typing import Optional
-
 from .config_loader import get_config
 
 
@@ -76,9 +74,9 @@ class AgentLoggerAdapter(logging.LoggerAdapter):
 
 
 def setup_logging(
-    level: Optional[str] = None,
-    json_format: Optional[bool] = None,
-    log_format: Optional[str] = None,
+    level: str | None = None,
+    json_format: bool | None = None,
+    log_format: str | None = None,
 ) -> None:
     """
     Set up logging configuration for the application.
@@ -135,7 +133,7 @@ def setup_logging(
 
 def get_logger(
     name: str,
-    agent_id: Optional[str] = None,
+    agent_id: str | None = None,
     **extra_context: str,
 ) -> logging.Logger | AgentLoggerAdapter:
     """

@@ -6,8 +6,8 @@ Fetches logs, analyzes issues, creates tickets, and generates reports.
 """
 
 import json
-from datetime import datetime
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any
 
 from ..agents import DataDogAgent, CodingAgent, ServiceNowAgent, OrchestratorAgent
 from ..utils.config_loader import get_config
@@ -72,8 +72,8 @@ class DailyAnalysisWorkflow:
         self._servicenow_agent = ServiceNowAgent()
         
         # Workflow state
-        self._start_time: Optional[datetime] = None
-        self._end_time: Optional[datetime] = None
+        self._start_time: datetime | None = None
+        self._end_time: datetime | None = None
         self._results: dict = {}
         
         logger.info(
@@ -89,7 +89,7 @@ class DailyAnalysisWorkflow:
         Returns:
             Dictionary containing the complete workflow report.
         """
-        self._start_time = datetime.utcnow()
+        self._start_time = datetime.now(timezone.utc)
         logger.info("Starting daily analysis workflow")
         
         try:
@@ -108,14 +108,14 @@ class DailyAnalysisWorkflow:
             # Step 4: Build final report
             report = self._build_report(logs_result, analysis_result, tickets_result)
             
-            self._end_time = datetime.utcnow()
+            self._end_time = datetime.now(timezone.utc)
             self._results = report
             
             logger.info("Daily analysis workflow completed successfully")
             return report
             
         except Exception as e:
-            self._end_time = datetime.utcnow()
+            self._end_time = datetime.now(timezone.utc)
             logger.error(f"Workflow failed: {e}")
             
             return {
@@ -386,7 +386,7 @@ class DailyAnalysisWorkflow:
         if not self._start_time:
             return "N/A"
         
-        end = self._end_time or datetime.utcnow()
+        end = self._end_time or datetime.now(timezone.utc)
         duration = end - self._start_time
         
         return f"{duration.total_seconds():.2f}s"
