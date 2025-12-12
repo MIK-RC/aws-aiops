@@ -94,9 +94,6 @@ AWS_ACCESS_KEY_ID=your-access-key-id
 AWS_SECRET_ACCESS_KEY=your-secret-access-key
 AWS_DEFAULT_REGION=us-east-1
 
-# Default Bedrock Model (optional - overrides config/agents.yaml)
-# BEDROCK_MODEL=global.anthropic.claude-haiku-4-5-20251001-v1:0
-
 # DataDog Credentials
 DATADOG_API_KEY=your-datadog-api-key
 DATADOG_APP_KEY=your-datadog-app-key
@@ -365,7 +362,6 @@ All environment variables can be set in a `.env` file (copy from `.env.example`)
 | `AWS_ACCESS_KEY_ID` | Yes | AWS access key ID |
 | `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret access key |
 | `AWS_DEFAULT_REGION` | No | AWS region (default: us-east-1) |
-| `BEDROCK_MODEL` | No | Override default Bedrock model ID |
 | `DATADOG_API_KEY` | Yes | DataDog API key |
 | `DATADOG_APP_KEY` | Yes | DataDog Application key |
 | `DATADOG_SITE` | No | DataDog site (default: us5) |
