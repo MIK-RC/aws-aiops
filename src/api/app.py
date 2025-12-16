@@ -8,13 +8,15 @@ import sys
 import uuid
 from pathlib import Path
 
+import uvicorn
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
 # Add project root to path for direct script execution
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import uvicorn
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
 
 from src.agents import OrchestratorAgent
 from src.utils.logging_config import get_logger, setup_logging
@@ -26,6 +28,14 @@ setup_logging()
 logger = get_logger("api")
 
 app = FastAPI(title="AIOps Orchestrator API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change to specific domains in production
+    allow_credentials=True,
+    allow_methods=["POST", "GET"],
+    allow_headers=["*"],
+)
 
 # Store sessions in memory
 _sessions: dict[str, OrchestratorAgent] = {}
