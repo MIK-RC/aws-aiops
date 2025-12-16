@@ -5,10 +5,10 @@ Implements multi-agent coordination using the Strands SDK Swarm pattern.
 Enables autonomous collaboration between DataDog, Coding, and ServiceNow agents.
 """
 
-from strands import Agent
+# from strands import Agent
 from strands.multiagent import Swarm
 
-from ..agents import CodingAgent, DataDogAgent, OrchestratorAgent, ServiceNowAgent
+from ..agents import CodingAgent, DataDogAgent, ServiceNowAgent  # , OrchestratorAgent
 from ..utils.config_loader import get_config
 from ..utils.logging_config import get_logger
 
