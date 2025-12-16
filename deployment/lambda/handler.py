@@ -12,6 +12,11 @@ import sys
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+# Load environment variables from .env file (for local testing)
+# In Lambda, env vars are set via Lambda configuration
+from dotenv import load_dotenv
+load_dotenv()
+
 from src.workflows import DailyAnalysisWorkflow, run_daily_analysis
 from src.utils.logging_config import setup_logging, get_logger
 

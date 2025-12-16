@@ -12,6 +12,10 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv(os.path.join(project_root, ".env"))
+
 from src.utils.logging_config import setup_logging
 from src.agents import OrchestratorAgent, DataDogAgent, CodingAgent, ServiceNowAgent
 from src.workflows import AIOpsSwarm, run_daily_analysis

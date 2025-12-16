@@ -6,7 +6,6 @@ These tools can be used standalone or as part of the Coding Agent.
 """
 
 import re
-from typing import Optional
 
 from strands import tool
 
@@ -19,27 +18,27 @@ logger = get_logger("tools.code_analysis")
 class CodeAnalyzer:
     """
     Code analysis utility for error pattern recognition and fix suggestions.
-    
+
     Can be used standalone or through the tool functions.
-    
+
     Usage:
         analyzer = CodeAnalyzer()
         patterns = analyzer.analyze_patterns(log_context)
         severity = analyzer.assess_severity(patterns)
     """
-    
+
     def __init__(self):
         """Initialize the code analyzer."""
         self._config = get_config().tools.code_analysis
         self._severity_keywords = self._config.analysis.get("severity_keywords", {})
-    
+
     def analyze_patterns(self, log_context: str) -> dict:
         """
         Analyze log context to identify error patterns.
-        
+
         Args:
             log_context: Formatted log entries as a string.
-            
+
         Returns:
             Dictionary containing identified patterns and analysis.
         """
@@ -51,152 +50,150 @@ class CodeAnalyzer:
             "recurring_issues": [],
             "potential_causes": [],
         }
-        
+
         lines = log_context.split("\n")
         error_counts: dict[str, int] = {}
-        
+
         for line in lines:
             if not line.strip():
                 continue
-            
+
             # Extract service name (look for [service-name] pattern, but not status words)
             status_words = {"error", "warn", "warning", "info", "debug", "fatal", "critical"}
-            for match in re.finditer(r'\[([a-z][\w-]*)\]', line, re.IGNORECASE):
+            for match in re.finditer(r"\[([a-z][\w-]*)\]", line, re.IGNORECASE):
                 service_name = match.group(1)
                 if service_name.lower() not in status_words:
                     patterns["affected_services"].add(service_name)
                     break  # Take first non-status match as service
-            
+
             # Extract timestamp
-            ts_match = re.search(r'\[(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})', line)
+            ts_match = re.search(r"\[(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})", line)
             if ts_match:
                 patterns["timestamps"].append(ts_match.group(1))
-            
+
             # Identify error types
             error_patterns = [
-                (r'(NullPointerException)', "NullPointerException"),
-                (r'(OutOfMemoryError)', "OutOfMemoryError"),
-                (r'(ConnectionRefused|Connection refused)', "ConnectionRefused"),
-                (r'(TimeoutException|Timeout|timed out)', "Timeout"),
-                (r'(SQLException|database error)', "DatabaseError"),
-                (r'(AuthenticationError|Unauthorized|401)', "AuthenticationError"),
-                (r'(PermissionDenied|Forbidden|403)', "PermissionError"),
-                (r'(FileNotFound|No such file)', "FileNotFoundError"),
-                (r'(ValidationError|Invalid)', "ValidationError"),
-                (r'(RateLimitExceeded|429|Too Many Requests)', "RateLimitError"),
+                (r"(NullPointerException)", "NullPointerException"),
+                (r"(OutOfMemoryError)", "OutOfMemoryError"),
+                (r"(ConnectionRefused|Connection refused)", "ConnectionRefused"),
+                (r"(TimeoutException|Timeout|timed out)", "Timeout"),
+                (r"(SQLException|database error)", "DatabaseError"),
+                (r"(AuthenticationError|Unauthorized|401)", "AuthenticationError"),
+                (r"(PermissionDenied|Forbidden|403)", "PermissionError"),
+                (r"(FileNotFound|No such file)", "FileNotFoundError"),
+                (r"(ValidationError|Invalid)", "ValidationError"),
+                (r"(RateLimitExceeded|429|Too Many Requests)", "RateLimitError"),
             ]
-            
+
             for pattern, error_type in error_patterns:
                 if re.search(pattern, line, re.IGNORECASE):
                     if error_type not in patterns["error_types"]:
                         patterns["error_types"].append(error_type)
                     error_counts[error_type] = error_counts.get(error_type, 0) + 1
-            
+
             # Check for stack traces
             if "at " in line and "(" in line and ")" in line:
                 patterns["stack_traces"].append(line.strip())
-        
+
         # Identify recurring issues (more than 3 occurrences)
         patterns["recurring_issues"] = [
-            {"type": error, "count": count}
-            for error, count in error_counts.items()
-            if count >= 3
+            {"type": error, "count": count} for error, count in error_counts.items() if count >= 3
         ]
-        
+
         # Convert set to list for JSON serialization
         patterns["affected_services"] = list(patterns["affected_services"])
-        
+
         # Analyze potential causes
         patterns["potential_causes"] = self._identify_causes(patterns)
-        
+
         return patterns
-    
+
     def _identify_causes(self, patterns: dict) -> list[str]:
         """Identify potential root causes based on error patterns."""
         causes = []
-        
+
         error_types = patterns.get("error_types", [])
-        
+
         if "ConnectionRefused" in error_types or "Timeout" in error_types:
             causes.append("Network connectivity issues or service unavailability")
-        
+
         if "OutOfMemoryError" in error_types:
             causes.append("Memory leak or insufficient heap allocation")
-        
+
         if "NullPointerException" in error_types:
             causes.append("Null reference handling - missing null checks")
-        
+
         if "DatabaseError" in error_types:
             causes.append("Database connection pool exhaustion or query issues")
-        
+
         if "AuthenticationError" in error_types:
             causes.append("Expired or invalid credentials/tokens")
-        
+
         if "RateLimitError" in error_types:
             causes.append("API rate limits exceeded - need backoff/retry logic")
-        
+
         if "ValidationError" in error_types:
             causes.append("Input validation failures - check data format/schema")
-        
+
         # Check for time patterns
         timestamps = patterns.get("timestamps", [])
         if len(timestamps) > 5:
             # Check if errors cluster around specific times
             causes.append("Possible time-based pattern - check scheduled jobs or traffic spikes")
-        
+
         return causes
-    
+
     def assess_severity(self, patterns: dict) -> str:
         """
         Assess the severity level based on error patterns.
-        
+
         Args:
             patterns: Dictionary from analyze_patterns.
-            
+
         Returns:
             Severity level: "critical", "high", "medium", or "low"
         """
         error_types = patterns.get("error_types", [])
         recurring = patterns.get("recurring_issues", [])
-        
+
         # Check for critical errors
         critical_keywords = self._severity_keywords.get("critical", [])
         for error in error_types:
             for keyword in critical_keywords:
                 if keyword.lower() in error.lower():
                     return "critical"
-        
+
         # Check for high severity
         high_keywords = self._severity_keywords.get("high", [])
         for error in error_types:
             for keyword in high_keywords:
                 if keyword.lower() in error.lower():
                     return "high"
-        
+
         # High severity if many recurring issues
         if len(recurring) >= 3:
             return "high"
-        
+
         # Medium if some errors identified
         if error_types:
             return "medium"
-        
+
         return "low"
-    
+
     def suggest_fixes(self, patterns: dict, service_name: str = "") -> list[dict]:
         """
         Generate fix suggestions based on identified patterns.
-        
+
         Args:
             patterns: Dictionary from analyze_patterns.
             service_name: Name of the affected service.
-            
+
         Returns:
             List of fix suggestions with code snippets where applicable.
         """
         suggestions = []
         error_types = patterns.get("error_types", [])
-        
+
         # Fix suggestions for common error types
         fix_templates = {
             "NullPointerException": {
@@ -212,7 +209,7 @@ else:
 # Or use Optional with get()
 result = obj.get('property', default_value) if obj else default_value
 """,
-                "prevention": "Use Optional types and null-safe operators"
+                "prevention": "Use Optional types and null-safe operators",
             },
             "ConnectionRefused": {
                 "issue": "Service connection failure",
@@ -236,7 +233,7 @@ def retry_with_backoff(max_retries=3, base_delay=1):
         return wrapper
     return decorator
 """,
-                "prevention": "Use connection pools and health checks"
+                "prevention": "Use connection pools and health checks",
             },
             "Timeout": {
                 "issue": "Request timeout",
@@ -254,7 +251,7 @@ async def fetch_with_timeout(url, timeout=30):
         async with session.get(url, timeout=timeout) as response:
             return await response.json()
 """,
-                "prevention": "Monitor response times and set appropriate timeouts"
+                "prevention": "Monitor response times and set appropriate timeouts",
             },
             "OutOfMemoryError": {
                 "issue": "Memory exhaustion",
@@ -271,7 +268,7 @@ import gc
 del large_object
 gc.collect()
 """,
-                "prevention": "Set memory limits and implement pagination for large datasets"
+                "prevention": "Set memory limits and implement pagination for large datasets",
             },
             "DatabaseError": {
                 "issue": "Database operation failure",
@@ -293,7 +290,7 @@ engine = create_engine(
 with engine.connect() as conn:
     conn.execute(text("SET statement_timeout = '30s'"))
 """,
-                "prevention": "Monitor connection pool metrics and slow queries"
+                "prevention": "Monitor connection pool metrics and slow queries",
             },
             "RateLimitError": {
                 "issue": "API rate limit exceeded",
@@ -314,37 +311,41 @@ class TokenBucket:
         self.fill_rate = fill_rate
         self.last_time = time.time()
 """,
-                "prevention": "Cache responses and batch requests where possible"
+                "prevention": "Cache responses and batch requests where possible",
             },
         }
-        
+
         for error_type in error_types:
             if error_type in fix_templates:
                 template = fix_templates[error_type]
-                suggestions.append({
-                    "error_type": error_type,
-                    "service": service_name or "Unknown",
-                    "severity": self.assess_severity({"error_types": [error_type]}),
-                    **template
-                })
-        
+                suggestions.append(
+                    {
+                        "error_type": error_type,
+                        "service": service_name or "Unknown",
+                        "severity": self.assess_severity({"error_types": [error_type]}),
+                        **template,
+                    }
+                )
+
         # Add general suggestions based on causes
         for cause in patterns.get("potential_causes", []):
             if not any(s.get("issue", "") in cause for s in suggestions):
-                suggestions.append({
-                    "error_type": "General",
-                    "service": service_name or "Unknown",
-                    "severity": "medium",
-                    "issue": cause,
-                    "suggestion": "Review related code and configuration",
-                    "prevention": "Add monitoring and alerting for this condition"
-                })
-        
+                suggestions.append(
+                    {
+                        "error_type": "General",
+                        "service": service_name or "Unknown",
+                        "severity": "medium",
+                        "issue": cause,
+                        "suggestion": "Review related code and configuration",
+                        "prevention": "Add monitoring and alerting for this condition",
+                    }
+                )
+
         return suggestions
 
 
 # Create a default analyzer instance
-_default_analyzer: Optional[CodeAnalyzer] = None
+_default_analyzer: CodeAnalyzer | None = None
 
 
 def _get_analyzer() -> CodeAnalyzer:
@@ -359,17 +360,17 @@ def _get_analyzer() -> CodeAnalyzer:
 def analyze_error_patterns(log_context: str) -> dict:
     """
     Analyze log entries to identify error patterns and potential issues.
-    
+
     This tool parses formatted log entries and identifies:
     - Types of errors occurring
     - Affected services
     - Recurring issues
     - Potential root causes
-    
+
     Args:
         log_context: Formatted log entries as a string.
                     Typically output from format_logs_for_analysis tool.
-        
+
     Returns:
         Dictionary containing:
         - error_types: List of identified error types
@@ -377,7 +378,7 @@ def analyze_error_patterns(log_context: str) -> dict:
         - recurring_issues: Issues occurring multiple times
         - potential_causes: Likely root causes
         - timestamps: Extracted timestamps
-        
+
     Example:
         patterns = analyze_error_patterns(formatted_logs)
         print(f"Found errors: {patterns['error_types']}")
@@ -394,14 +395,14 @@ def suggest_code_fix(
 ) -> list[dict]:
     """
     Generate code fix suggestions based on identified error patterns.
-    
+
     This tool provides actionable fix suggestions including code snippets
     for common error types identified in the log analysis.
-    
+
     Args:
         error_patterns: Dictionary from analyze_error_patterns tool.
         service_name: Name of the affected service for context.
-        
+
     Returns:
         List of fix suggestions, each containing:
         - error_type: Type of error addressed
@@ -411,7 +412,7 @@ def suggest_code_fix(
         - suggestion: Recommended fix approach
         - code_snippet: Example code for implementing the fix
         - prevention: How to prevent recurrence
-        
+
     Example:
         patterns = analyze_error_patterns(logs)
         fixes = suggest_code_fix(patterns, service_name="payment-api")
@@ -427,20 +428,20 @@ def suggest_code_fix(
 def assess_severity(error_patterns: dict) -> dict:
     """
     Assess the overall severity of identified error patterns.
-    
+
     This tool evaluates the error patterns and returns a severity
     assessment that can be used for prioritization and alerting.
-    
+
     Args:
         error_patterns: Dictionary from analyze_error_patterns tool.
-        
+
     Returns:
         Dictionary containing:
         - severity: Overall severity level (critical/high/medium/low)
         - error_count: Total number of error types found
         - recurring_count: Number of recurring issues
         - recommendation: Recommended action based on severity
-        
+
     Example:
         patterns = analyze_error_patterns(logs)
         assessment = assess_severity(patterns)
@@ -449,17 +450,17 @@ def assess_severity(error_patterns: dict) -> dict:
     """
     analyzer = _get_analyzer()
     severity = analyzer.assess_severity(error_patterns)
-    
+
     error_count = len(error_patterns.get("error_types", []))
     recurring_count = len(error_patterns.get("recurring_issues", []))
-    
+
     recommendations = {
         "critical": "Immediate action required. Escalate to on-call team.",
         "high": "Urgent attention needed. Create high-priority ticket.",
         "medium": "Should be addressed soon. Schedule for next sprint.",
         "low": "Monitor and address when convenient.",
     }
-    
+
     return {
         "severity": severity,
         "error_count": error_count,

@@ -52,8 +52,7 @@ This system transforms traditional AIOps workflows into an intelligent multi-age
 ### Prerequisites
 
 - Python 3.12+
-- AWS CLI configured with appropriate permissions
-- Access to Amazon Bedrock (Claude models)
+- AWS account with Bedrock access (Claude models enabled)
 - DataDog API credentials
 - ServiceNow instance credentials
 
@@ -73,38 +72,81 @@ pip install -r requirements.txt
 
 # For development
 pip install -r requirements-dev.txt
+
+# Set up your environment
+cp .env.example .env
+# Edit .env with your credentials
 ```
 
 ### Configuration
 
-1. **Set environment variables:**
+1. **Create your `.env` file from the template:**
 
 ```bash
-export AWS_REGION=us-east-1
-export DATADOG_API_KEY=your-api-key
-export DATADOG_APP_KEY=your-app-key
-export SERVICENOW_INSTANCE=your-instance.service-now.com
-export SERVICENOW_USER=your-username
-export SERVICENOW_PASS=your-password
+cp .env.example .env
 ```
 
-2. **Or use a `.env` file:**
+2. **Edit `.env` with your credentials:**
 
 ```env
-AWS_REGION=us-east-1
-DATADOG_API_KEY=your-api-key
-DATADOG_APP_KEY=your-app-key
+# AWS Credentials
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_DEFAULT_REGION=us-east-1
+
+# DataDog Credentials
+DATADOG_API_KEY=your-datadog-api-key
+DATADOG_APP_KEY=your-datadog-app-key
+DATADOG_SITE=us5
+
+# ServiceNow Credentials
 SERVICENOW_INSTANCE=your-instance.service-now.com
 SERVICENOW_USER=your-username
 SERVICENOW_PASS=your-password
 ```
 
-3. **Customize configuration** in `config/` directory:
-   - `settings.yaml`: Global settings, AWS region, session storage
+3. **Customize agent configuration** in `config/` directory (optional):
+   - `settings.yaml`: Global settings, session storage, rate limits
    - `agents.yaml`: Agent prompts, model IDs, behavior
    - `tools.yaml`: Tool-specific settings (API endpoints, limits)
 
+> **Note:** The `.env` file is automatically loaded by the application. Never commit your `.env` file to version control!
+
 ## Usage
+
+### API Server (Recommended)
+
+The primary way to interact with the system is through the FastAPI server:
+
+```bash
+# Start the API server
+python src/api/app.py
+
+# Or with uvicorn (more control)
+uvicorn src.api.app:app --reload --port 8000
+```
+
+**API Endpoint:**
+
+```bash
+# Send a message to the orchestrator
+curl -X POST http://localhost:8000/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Analyze errors in the payment service"}'
+
+# Response:
+# {
+#   "response": "I analyzed the payment service logs...",
+#   "session_id": "sess-a1b2c3d4"
+# }
+
+# Continue the conversation using the session_id
+curl -X POST http://localhost:8000/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Create a ticket for the critical issues", "session_id": "sess-a1b2c3d4"}'
+```
+
+**API Docs:** `http://localhost:8000/docs`
 
 ### Command Line Interface
 
@@ -237,10 +279,13 @@ aws events put-rule \
 aiops-multi-agent/
 ├── config/                     # YAML configuration files
 │   ├── settings.yaml           # Global settings
-│   ├── agents.yaml             # Agent configurations
+│   ├── agents.yaml             # Agent configurations & prompts
 │   └── tools.yaml              # Tool configurations
 │
 ├── src/                        # Source code
+│   ├── api/                    # FastAPI application
+│   │   └── app.py              # API server
+│   │
 │   ├── agents/                 # Agent implementations
 │   │   ├── base.py             # BaseAgent class
 │   │   ├── orchestrator.py     # OrchestratorAgent
@@ -248,7 +293,7 @@ aiops-multi-agent/
 │   │   ├── coding_agent.py     # CodingAgent
 │   │   └── servicenow_agent.py # ServiceNowAgent
 │   │
-│   ├── tools/                  # Tool implementations
+│   ├── tools/                  # Tool implementations (standalone)
 │   │   ├── datadog_tools.py    # DataDog API tools
 │   │   ├── servicenow_tools.py # ServiceNow API tools
 │   │   └── code_analysis_tools.py # Code analysis tools
@@ -341,17 +386,24 @@ datadog:
 | strands-agents | 1.19.0 | Core agent framework |
 | boto3 | >=1.35.0 | AWS SDK |
 | bedrock-agentcore | >=0.1.0 | AgentCore runtime |
+| fastapi | >=0.115.0 | API framework |
+| uvicorn | >=0.32.0 | ASGI server |
 | pydantic | >=2.4.0 | Data validation |
 | PyYAML | >=6.0.1 | Configuration |
 | requests | >=2.31.0 | HTTP client |
 
 ## Environment Variables
 
+All environment variables can be set in a `.env` file (copy from `.env.example`).
+
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `AWS_REGION` | No | AWS region (default: us-east-1) |
+| `AWS_ACCESS_KEY_ID` | Yes | AWS access key ID |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret access key |
+| `AWS_DEFAULT_REGION` | No | AWS region (default: us-east-1) |
 | `DATADOG_API_KEY` | Yes | DataDog API key |
 | `DATADOG_APP_KEY` | Yes | DataDog Application key |
+| `DATADOG_SITE` | No | DataDog site (default: us5) |
 | `SERVICENOW_INSTANCE` | Yes | ServiceNow instance URL |
 | `SERVICENOW_USER` | Yes | ServiceNow username |
 | `SERVICENOW_PASS` | Yes | ServiceNow password |
