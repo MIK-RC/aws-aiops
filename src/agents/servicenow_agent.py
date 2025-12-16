@@ -5,44 +5,44 @@ Specialist agent for managing ServiceNow incidents.
 Can be used standalone or as part of the multi-agent swarm.
 """
 
-from .base import BaseAgent
 from ..tools.servicenow_tools import (
-    create_incident,
-    update_incident,
-    get_incident_status,
     ServiceNowClient,
+    create_incident,
+    get_incident_status,
+    update_incident,
 )
+from .base import BaseAgent
 
 
 class ServiceNowAgent(BaseAgent):
     """
     ServiceNow Specialist Agent for incident management.
-    
+
     Responsibilities:
     - Create well-structured incident tickets
     - Update existing incidents with new information
     - Track incident status
     - Ensure proper categorization and priority
-    
+
     Standalone Usage:
         agent = ServiceNowAgent()
-        
+
         # Simple invocation with LLM reasoning
         result = agent.invoke("Create a ticket for database connection issues")
-        
+
         # Direct tool access
         ticket = agent.create_ticket(
             title="Database connection timeout",
             description="Full details...",
             priority="high"
         )
-    
+
     Swarm Usage:
         # The agent's inner_agent can be used in a Swarm
         from strands.multiagent import Swarm
         swarm = Swarm(agents=[servicenow_agent.inner_agent, ...])
     """
-    
+
     def __init__(
         self,
         model_id: str | None = None,
@@ -53,7 +53,7 @@ class ServiceNowAgent(BaseAgent):
     ):
         """
         Initialize the ServiceNow Agent.
-        
+
         Args:
             model_id: Optional Bedrock model ID override.
             region: Optional AWS region override.
@@ -67,13 +67,13 @@ class ServiceNowAgent(BaseAgent):
             username=username,
             password=password,
         )
-        
+
         super().__init__(
             agent_type="servicenow",
             model_id=model_id,
             region=region,
         )
-    
+
     def get_tools(self) -> list:
         """Get the ServiceNow-specific tools."""
         return [
@@ -81,11 +81,11 @@ class ServiceNowAgent(BaseAgent):
             update_incident,
             get_incident_status,
         ]
-    
+
     # ==========================================
     # Direct Tool Access Methods (Standalone Use)
     # ==========================================
-    
+
     def create_ticket(
         self,
         title: str,
@@ -97,10 +97,10 @@ class ServiceNowAgent(BaseAgent):
     ) -> dict:
         """
         Create a ServiceNow incident ticket directly.
-        
+
         Use this for programmatic access when you don't need
         LLM reasoning, just direct ticket creation.
-        
+
         Args:
             title: Short description of the incident (max 160 chars).
             description: Full description with details.
@@ -108,12 +108,12 @@ class ServiceNowAgent(BaseAgent):
             category: Optional category override.
             assignment_group: Optional assignment group.
             extra_fields: Additional ServiceNow fields.
-            
+
         Returns:
             Dictionary with created ticket details.
         """
         self._logger.info(f"Creating ticket: {title[:50]}...")
-        
+
         result = self._servicenow_client.create_incident(
             short_description=title,
             description=description,
@@ -122,21 +122,23 @@ class ServiceNowAgent(BaseAgent):
             assignment_group=assignment_group,
             extra=extra_fields,
         )
-        
+
         success = "error" not in result
         ticket_number = result.get("number", "N/A")
-        
+
         self.record_action(
             action_type="create_ticket",
             description=f"Created ticket {ticket_number}" if success else "Failed to create ticket",
             input_summary=f"Title: {title[:100]}",
-            output_summary=f"Ticket: {ticket_number}" if success else result.get("error", "Unknown error"),
+            output_summary=f"Ticket: {ticket_number}"
+            if success
+            else result.get("error", "Unknown error"),
             success=success,
             error_message=result.get("error", "") if not success else "",
         )
-        
+
         return result
-    
+
     def update_ticket(
         self,
         ticket_id: str,
@@ -147,19 +149,19 @@ class ServiceNowAgent(BaseAgent):
     ) -> dict:
         """
         Update an existing ServiceNow ticket.
-        
+
         Args:
             ticket_id: The sys_id of the ticket to update.
             work_notes: Notes about work performed.
             state: New state for the ticket.
             resolution_notes: Resolution details.
             extra_updates: Additional fields to update.
-            
+
         Returns:
             Dictionary with updated ticket details.
         """
         self._logger.info(f"Updating ticket: {ticket_id}")
-        
+
         updates = {}
         if work_notes:
             updates["work_notes"] = work_notes
@@ -169,42 +171,44 @@ class ServiceNowAgent(BaseAgent):
             updates["close_notes"] = resolution_notes
         if extra_updates:
             updates.update(extra_updates)
-        
+
         if not updates:
             return {"error": "No updates provided"}
-        
+
         result = self._servicenow_client.update_incident(
             sys_id=ticket_id,
             updates=updates,
         )
-        
+
         success = "error" not in result
-        
+
         self.record_action(
             action_type="update_ticket",
             description=f"Updated ticket {ticket_id}" if success else "Failed to update ticket",
             input_summary=f"Updates: {list(updates.keys())}",
-            output_summary=f"Updated fields: {list(updates.keys())}" if success else result.get("error", "Unknown error"),
+            output_summary=f"Updated fields: {list(updates.keys())}"
+            if success
+            else result.get("error", "Unknown error"),
             success=success,
             error_message=result.get("error", "") if not success else "",
         )
-        
+
         return result
-    
+
     def get_ticket_status(self, ticket_id: str) -> dict:
         """
         Get the current status of a ticket.
-        
+
         Args:
             ticket_id: The sys_id of the ticket.
-            
+
         Returns:
             Dictionary with ticket status details.
         """
         self._logger.info(f"Getting status for ticket: {ticket_id}")
-        
+
         result = self._servicenow_client.get_incident(ticket_id)
-        
+
         if "error" not in result:
             return {
                 "sys_id": result.get("sys_id"),
@@ -216,9 +220,9 @@ class ServiceNowAgent(BaseAgent):
                 "created_on": result.get("sys_created_on"),
                 "updated_on": result.get("sys_updated_on"),
             }
-        
+
         return result
-    
+
     def create_ticket_from_analysis(
         self,
         service_name: str,
@@ -228,16 +232,16 @@ class ServiceNowAgent(BaseAgent):
     ) -> dict:
         """
         Create a ticket from an analysis report.
-        
+
         This is a convenience method that creates a well-formatted
         ticket based on the output from the Coding Agent's analysis.
-        
+
         Args:
             service_name: Name of the affected service.
             analysis_report: Dictionary from CodingAgent.full_analysis().
             user_input: Original user request (if any).
             log_context: Relevant log entries.
-            
+
         Returns:
             Dictionary with created ticket details.
         """
@@ -245,21 +249,23 @@ class ServiceNowAgent(BaseAgent):
         severity_level = severity.get("severity", "medium")
         patterns = analysis_report.get("patterns", {})
         suggestions = analysis_report.get("suggestions", [])
-        
+
         # Build short description
         error_types = patterns.get("error_types", ["Issue"])
         short_desc = f"[{service_name}] {', '.join(error_types[:2])}"
         if len(error_types) > 2:
             short_desc += f" (+{len(error_types) - 2} more)"
-        
+
         # Build full description
         description_parts = []
-        
+
         if user_input:
             description_parts.append(f"## User Report\n{user_input}")
-        
-        description_parts.append(f"## AI Analysis Summary\n{analysis_report.get('summary', 'No summary available')}")
-        
+
+        description_parts.append(
+            f"## AI Analysis Summary\n{analysis_report.get('summary', 'No summary available')}"
+        )
+
         if suggestions:
             description_parts.append("\n## Suggested Fixes")
             for i, suggestion in enumerate(suggestions[:3], 1):
@@ -267,23 +273,23 @@ class ServiceNowAgent(BaseAgent):
                     f"{i}. **{suggestion.get('error_type', 'Issue')}**: "
                     f"{suggestion.get('suggestion', 'Review and fix')}"
                 )
-        
+
         if log_context:
             # Truncate log context to avoid overly long tickets
             truncated_logs = log_context[:2000]
             if len(log_context) > 2000:
                 truncated_logs += "\n... [truncated]"
             description_parts.append(f"\n## Relevant Logs\n```\n{truncated_logs}\n```")
-        
+
         description = "\n\n".join(description_parts)
-        
+
         return self.create_ticket(
             title=short_desc,
             description=description,
             priority=severity_level,
             extra_fields={"category": "LLM-Assisted Resolution"},
         )
-    
+
     def create_ticket_with_llm(
         self,
         issue_description: str,
@@ -291,14 +297,14 @@ class ServiceNowAgent(BaseAgent):
     ) -> str:
         """
         Use LLM reasoning to create an appropriate ticket.
-        
+
         The LLM will determine the best title, description, and
         priority based on the provided information.
-        
+
         Args:
             issue_description: Description of the issue.
             context: Additional context (logs, analysis, etc.).
-            
+
         Returns:
             LLM response describing the created ticket.
         """
@@ -307,7 +313,7 @@ class ServiceNowAgent(BaseAgent):
 Issue Description:
 {issue_description}
 
-{f'Additional Context:{chr(10)}{context}' if context else ''}
+{f"Additional Context:{chr(10)}{context}" if context else ""}
 
 Create a ticket with:
 1. An appropriate short description (max 160 characters)

@@ -18,9 +18,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.agents import OrchestratorAgent, DataDogAgent, CodingAgent, ServiceNowAgent
+from src.agents import CodingAgent, DataDogAgent, OrchestratorAgent, ServiceNowAgent
+from src.utils.logging_config import get_logger, setup_logging
 from src.workflows import AIOpsSwarm, run_daily_analysis
-from src.utils.logging_config import setup_logging, get_logger
 
 logger = get_logger("main")
 
@@ -62,9 +62,13 @@ Examples:
 
     # Analyze command
     analyze_parser = subparsers.add_parser("analyze", help="Run analysis workflow")
-    analyze_parser.add_argument("--time-from", default="now-1d", help="Start time (default: now-1d)")
+    analyze_parser.add_argument(
+        "--time-from", default="now-1d", help="Start time (default: now-1d)"
+    )
     analyze_parser.add_argument("--time-to", default="now", help="End time (default: now)")
-    analyze_parser.add_argument("--create-tickets", action="store_true", help="Create ServiceNow tickets")
+    analyze_parser.add_argument(
+        "--create-tickets", action="store_true", help="Create ServiceNow tickets"
+    )
     analyze_parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
 
     # Swarm command
@@ -127,7 +131,7 @@ Examples:
         sys.exit(1)
 
 
-def cmd_chat(prompt: str, session_id: str = None) -> str:
+def cmd_chat(prompt: str, session_id: str = "") -> str:
     """Handle chat command."""
     logger.info(f"Starting chat: {prompt[:50]}...")
 
@@ -187,7 +191,7 @@ def cmd_swarm(task: str) -> dict:
     return result.to_dict()
 
 
-def cmd_test_agent(agent_name: str, prompt: str = None) -> str:
+def cmd_test_agent(agent_name: str, prompt: str = "") -> str:
     """Handle test-agent command."""
     logger.info(f"Testing agent: {agent_name}")
 

@@ -12,13 +12,15 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 
+from src.agents import OrchestratorAgent
+from src.utils.logging_config import get_logger, setup_logging
+
 load_dotenv()
 
-from src.agents import OrchestratorAgent
-from src.utils.logging_config import setup_logging, get_logger
 
 setup_logging()
 logger = get_logger("api")
@@ -81,7 +83,6 @@ async def health():
 
 def main():
     """Run the API server."""
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

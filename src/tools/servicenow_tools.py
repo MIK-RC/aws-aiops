@@ -6,6 +6,7 @@ These tools can be used standalone or as part of the ServiceNow Agent.
 """
 
 import os
+
 import requests
 from strands import tool
 
@@ -18,9 +19,9 @@ logger = get_logger("tools.servicenow")
 class ServiceNowClient:
     """
     ServiceNow API client for incident management.
-    
+
     Can be used standalone or through the tool functions.
-    
+
     Usage:
         # Standalone usage
         client = ServiceNowClient()
@@ -28,7 +29,7 @@ class ServiceNowClient:
             short_description="Database connection timeout",
             description="Full details here..."
         )
-        
+
         # With custom credentials
         client = ServiceNowClient(
             instance="mycompany.service-now.com",
@@ -36,7 +37,7 @@ class ServiceNowClient:
             password="api_password"
         )
     """
-    
+
     def __init__(
         self,
         instance: str | None = None,
@@ -45,7 +46,7 @@ class ServiceNowClient:
     ):
         """
         Initialize the ServiceNow client.
-        
+
         Args:
             instance: ServiceNow instance URL (e.g., "mycompany.service-now.com").
                      Defaults to SERVICENOW_INSTANCE env var.
@@ -53,16 +54,16 @@ class ServiceNowClient:
             password: ServiceNow password. Defaults to SERVICENOW_PASS env var.
         """
         self._config = get_config().tools.servicenow
-        
+
         self._instance = instance or os.environ.get("SERVICENOW_INSTANCE")
         self._username = username or os.environ.get("SERVICENOW_USER", "")
         self._password = password or os.environ.get("SERVICENOW_PASS", "")
-        
+
         if not self._instance:
             logger.warning("ServiceNow instance not configured")
-        
+
         self._timeout = self._config.request.get("timeout_seconds", 30)
-    
+
     @property
     def base_url(self) -> str:
         """Get the base URL for the ServiceNow instance."""
@@ -72,12 +73,12 @@ class ServiceNowClient:
         if self._instance.startswith("http"):
             return self._instance.rstrip("/")
         return f"https://{self._instance}"
-    
+
     @property
     def auth(self) -> tuple[str, str]:
         """Get the authentication tuple."""
         return (self._username, self._password)
-    
+
     @property
     def headers(self) -> dict[str, str]:
         """Get the request headers."""
@@ -85,29 +86,29 @@ class ServiceNowClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
-    
+
     def _get_priority_values(self, priority: str) -> tuple[str, str]:
         """
         Get impact and urgency values for a priority level.
-        
+
         Args:
             priority: Priority level (critical, high, medium, low)
-            
+
         Returns:
             Tuple of (impact, urgency) values
         """
         mapping = self._config.priority_mapping
         defaults = self._config.defaults
-        
+
         if priority.lower() in mapping:
             priority_config = mapping[priority.lower()]
             return (
                 priority_config.get("impact", defaults.get("impact", "3")),
                 priority_config.get("urgency", defaults.get("urgency", "3")),
             )
-        
+
         return (defaults.get("impact", "3"), defaults.get("urgency", "3"))
-    
+
     def create_incident(
         self,
         short_description: str,
@@ -119,7 +120,7 @@ class ServiceNowClient:
     ) -> dict:
         """
         Create a new incident in ServiceNow.
-        
+
         Args:
             short_description: Brief description of the incident (max 160 chars).
             description: Full description with details.
@@ -127,21 +128,21 @@ class ServiceNowClient:
             category: Incident category. Defaults to config default.
             assignment_group: Group to assign the ticket to.
             extra: Additional fields to include in the ticket.
-            
+
         Returns:
             Dict containing the created incident details including sys_id and number.
         """
         if not self.base_url:
             logger.error("ServiceNow instance not configured")
             return {"error": "ServiceNow instance not configured"}
-        
+
         defaults = self._config.defaults
         endpoint = self._config.endpoints.get("incidents", "/api/now/table/incident")
         url = f"{self.base_url}{endpoint}"
-        
+
         # Get impact and urgency from priority
         impact, urgency = self._get_priority_values(priority)
-        
+
         payload = {
             "short_description": short_description[:160],  # Enforce max length
             "description": description,
@@ -149,17 +150,17 @@ class ServiceNowClient:
             "urgency": urgency,
             "category": category or defaults.get("category", "LLM-Assisted Resolution"),
         }
-        
+
         # Add assignment group if specified
         if assignment_group or defaults.get("assignment_group"):
             payload["assignment_group"] = assignment_group or defaults.get("assignment_group")
-        
+
         # Merge extra fields
         if extra:
             payload.update(extra)
-        
+
         logger.info(f"Creating ServiceNow incident: {short_description[:50]}...")
-        
+
         try:
             response = requests.post(
                 url,
@@ -169,23 +170,23 @@ class ServiceNowClient:
                 timeout=self._timeout,
             )
             response.raise_for_status()
-            
+
             result = response.json().get("result", {})
-            
+
             logger.info(
                 f"Created incident: {result.get('number', 'N/A')} "
                 f"(sys_id: {result.get('sys_id', 'N/A')})"
             )
-            
+
             return result
-            
+
         except requests.exceptions.Timeout:
             logger.error("ServiceNow API request timed out")
             return {"error": "Request timed out"}
         except requests.exceptions.RequestException as e:
             logger.error(f"ServiceNow API request failed: {e}")
             return {"error": str(e)}
-    
+
     def update_incident(
         self,
         sys_id: str,
@@ -193,23 +194,23 @@ class ServiceNowClient:
     ) -> dict:
         """
         Update an existing incident.
-        
+
         Args:
             sys_id: The sys_id of the incident to update.
             updates: Dictionary of fields to update.
-            
+
         Returns:
             Dict containing the updated incident details.
         """
         if not self.base_url:
             logger.error("ServiceNow instance not configured")
             return {"error": "ServiceNow instance not configured"}
-        
+
         endpoint = self._config.endpoints.get("incidents", "/api/now/table/incident")
         url = f"{self.base_url}{endpoint}/{sys_id}"
-        
+
         logger.info(f"Updating incident: {sys_id}")
-        
+
         try:
             response = requests.patch(
                 url,
@@ -219,33 +220,33 @@ class ServiceNowClient:
                 timeout=self._timeout,
             )
             response.raise_for_status()
-            
+
             result = response.json().get("result", {})
             logger.info(f"Updated incident: {result.get('number', sys_id)}")
-            
+
             return result
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"ServiceNow update failed: {e}")
             return {"error": str(e)}
-    
+
     def get_incident(self, sys_id: str) -> dict:
         """
         Get details of an existing incident.
-        
+
         Args:
             sys_id: The sys_id of the incident.
-            
+
         Returns:
             Dict containing the incident details.
         """
         if not self.base_url:
             logger.error("ServiceNow instance not configured")
             return {"error": "ServiceNow instance not configured"}
-        
+
         endpoint = self._config.endpoints.get("incidents", "/api/now/table/incident")
         url = f"{self.base_url}{endpoint}/{sys_id}"
-        
+
         try:
             response = requests.get(
                 url,
@@ -254,9 +255,9 @@ class ServiceNowClient:
                 timeout=self._timeout,
             )
             response.raise_for_status()
-            
+
             return response.json().get("result", {})
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"ServiceNow get failed: {e}")
             return {"error": str(e)}
@@ -283,17 +284,17 @@ def create_incident(
 ) -> dict:
     """
     Create a new incident ticket in ServiceNow.
-    
+
     This tool creates an incident in ServiceNow's ITSM system with the provided
     details. Use it when an issue has been identified that requires tracking.
-    
+
     Args:
         short_description: Brief summary of the incident (max 160 characters).
                           Should be clear and actionable.
                           Example: "[payment-api] Database connection timeouts"
         description: Full description of the incident including:
                     - What happened
-                    - When it happened  
+                    - When it happened
                     - Impact assessment
                     - Suggested resolution
                     - Related log entries or evidence
@@ -302,14 +303,14 @@ def create_incident(
                  Defaults to "medium".
         category: Optional category for the incident.
                  Defaults to "LLM-Assisted Resolution" if not specified.
-    
+
     Returns:
         Dictionary containing:
         - sys_id: Unique identifier for the incident
         - number: Human-readable incident number (e.g., "INC0012345")
         - state: Current state of the incident
         - Or error details if creation failed
-        
+
     Example:
         result = create_incident(
             short_description="[user-service] Authentication failures spike",
@@ -335,10 +336,10 @@ def update_incident(
 ) -> dict:
     """
     Update an existing incident in ServiceNow.
-    
+
     This tool updates an incident with new information such as work notes,
     state changes, or resolution details.
-    
+
     Args:
         incident_id: The sys_id of the incident to update.
         work_notes: Notes about work performed on the incident.
@@ -347,10 +348,10 @@ def update_incident(
                Common values: "In Progress", "On Hold", "Resolved", "Closed"
         resolution_notes: Notes about how the incident was resolved.
                          Required when setting state to "Resolved".
-    
+
     Returns:
         Dictionary containing the updated incident details or error information.
-        
+
     Example:
         result = update_incident(
             incident_id="abc123...",
@@ -360,7 +361,7 @@ def update_incident(
         )
     """
     client = _get_client()
-    
+
     updates = {}
     if work_notes:
         updates["work_notes"] = work_notes
@@ -368,10 +369,10 @@ def update_incident(
         updates["state"] = state
     if resolution_notes:
         updates["close_notes"] = resolution_notes
-    
+
     if not updates:
         return {"error": "No updates provided"}
-    
+
     return client.update_incident(sys_id=incident_id, updates=updates)
 
 
@@ -379,13 +380,13 @@ def update_incident(
 def get_incident_status(incident_id: str) -> dict:
     """
     Get the current status of a ServiceNow incident.
-    
+
     This tool retrieves the current details of an incident including
     its state, assignments, and any updates.
-    
+
     Args:
         incident_id: The sys_id of the incident to retrieve.
-        
+
     Returns:
         Dictionary containing incident details:
         - number: Incident number
@@ -394,17 +395,17 @@ def get_incident_status(incident_id: str) -> dict:
         - assigned_to: Assigned user
         - short_description: Brief description
         - Or error details if retrieval failed
-        
+
     Example:
         status = get_incident_status("abc123...")
         print(f"Incident {status['number']} is {status['state']}")
     """
     client = _get_client()
     result = client.get_incident(sys_id=incident_id)
-    
+
     if "error" in result:
         return result
-    
+
     # Return a simplified status view
     return {
         "sys_id": result.get("sys_id"),
