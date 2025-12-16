@@ -7,7 +7,7 @@ Contains shared functionality for initialization, logging, and action tracking.
 
 import uuid
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field

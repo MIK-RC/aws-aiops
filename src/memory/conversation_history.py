@@ -6,7 +6,7 @@ Provides utilities for storing, retrieving, and summarizing conversations.
 """
 
 import json
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -19,7 +19,7 @@ logger = get_logger("memory.conversation")
 class ConversationEntry(BaseModel):
     """A single entry in the conversation history."""
 
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     role: str  # "user", "assistant", "system"
     content: str
     metadata: dict = Field(default_factory=dict)
