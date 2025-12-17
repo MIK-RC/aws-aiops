@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..agents import CodingAgent, DataDogAgent, S3Agent, ServiceNowAgent
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 
 logger = get_logger("workflows.proactive")
@@ -347,8 +347,8 @@ class ProactiveWorkflow:
 
     def __init__(self):
         """Initialize the proactive workflow."""
-        self._config = get_config()
-        workflow_config = self._config.settings.workflow
+        settings = load_settings()
+        workflow_config = settings.get("workflow", {})
 
         self._time_from = workflow_config.get("default_time_from", "now-1d")
         self._time_to = workflow_config.get("default_time_to", "now")

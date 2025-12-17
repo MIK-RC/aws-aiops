@@ -356,3 +356,22 @@ def get_config(config_dir: str | None = None) -> ConfigLoader:
         aws_region = config.settings.aws.region
     """
     return ConfigLoader(config_dir)
+
+
+def load_settings() -> dict:
+    """
+    Load settings.yaml as a plain dictionary.
+
+    Simple function for direct config access without Pydantic validation.
+
+    Returns:
+        Raw settings dictionary.
+
+    Usage:
+        from src.utils.config_loader import load_settings
+
+        settings = load_settings()
+        max_workers = settings.get("workflow", {}).get("max_workers", 50)
+    """
+    config = get_config()
+    return config.get_raw_config("settings")
