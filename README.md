@@ -16,7 +16,10 @@ This system runs as an ECS container triggered by AWS EventBridge. When triggere
 ## Architecture
 
 ```
-EventBridge / Bedrock Agent Runtime API
+EventBridge (scheduled)
+        │
+        ▼
+Bedrock Agent Runtime API
         │
         ▼
 ┌──────────────────────────────────────────────────────────────┐
@@ -249,25 +252,15 @@ docker push <account>.dkr.ecr.<region>.amazonaws.com/aiops-proactive:latest
 
 2. Configure AgentCore with the image URI
 
-3. Invoke via Bedrock Agent Runtime API:
-```python
-import boto3
-
-client = boto3.client('bedrock-agent-runtime')
-response = client.invoke_agent(
-    agentId='YOUR_AGENT_ID',
-    agentAliasId='YOUR_ALIAS_ID',
-    sessionId='session-123',
-    inputText='{"mode": "proactive"}'
-)
-```
-
-### EventBridge Rule (Scheduled)
-
-Create a rule to trigger the agent on a schedule:
+3. Create EventBridge rule to trigger the agent on schedule:
 ```
 Schedule: rate(1 day) or cron(0 6 * * ? *)
-Target: Bedrock Agent
+Target: Bedrock Agent Runtime API
+```
+
+**Flow:**
+```
+EventBridge (schedule) → Bedrock Agent Runtime API → AgentCore → Proactive Workflow
 ```
 
 ### IAM Permissions
