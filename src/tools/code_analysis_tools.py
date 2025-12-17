@@ -30,7 +30,7 @@ class CodeAnalyzer:
     def __init__(self):
         """Initialize the code analyzer."""
         self._config = load_tools_config().get("code_analysis", {})
-        self._severity_keywords = self._config.analysis.get("severity_keywords", {})
+        self._severity_keywords = self._config.get("analysis", {}).get("severity_keywords", {})
 
     def analyze_patterns(self, log_context: str) -> dict:
         """

@@ -62,7 +62,7 @@ class ServiceNowClient:
         if not self._instance:
             logger.warning("ServiceNow instance not configured")
 
-        self._timeout = self._config.request.get("timeout_seconds", 30)
+        self._timeout = self._config.get("request", {}).get("timeout_seconds", 30)
 
     @property
     def base_url(self) -> str:
@@ -97,8 +97,8 @@ class ServiceNowClient:
         Returns:
             Tuple of (impact, urgency) values
         """
-        mapping = self._config.priority_mapping
-        defaults = self._config.defaults
+        mapping = self._config.get("priority_mapping", {})
+        defaults = self._config.get("defaults", {})
 
         if priority.lower() in mapping:
             priority_config = mapping[priority.lower()]
@@ -136,8 +136,8 @@ class ServiceNowClient:
             logger.error("ServiceNow instance not configured")
             return {"error": "ServiceNow instance not configured"}
 
-        defaults = self._config.defaults
-        endpoint = self._config.endpoints.get("incidents", "/api/now/table/incident")
+        defaults = self._config.get("defaults", {})
+        endpoint = self._config.get("endpoints", {}).get("incidents", "/api/now/table/incident")
         url = f"{self.base_url}{endpoint}"
 
         # Get impact and urgency from priority
@@ -206,7 +206,7 @@ class ServiceNowClient:
             logger.error("ServiceNow instance not configured")
             return {"error": "ServiceNow instance not configured"}
 
-        endpoint = self._config.endpoints.get("incidents", "/api/now/table/incident")
+        endpoint = self._config.get("endpoints", {}).get("incidents", "/api/now/table/incident")
         url = f"{self.base_url}{endpoint}/{sys_id}"
 
         logger.info(f"Updating incident: {sys_id}")
@@ -244,7 +244,7 @@ class ServiceNowClient:
             logger.error("ServiceNow instance not configured")
             return {"error": "ServiceNow instance not configured"}
 
-        endpoint = self._config.endpoints.get("incidents", "/api/now/table/incident")
+        endpoint = self._config.get("endpoints", {}).get("incidents", "/api/now/table/incident")
         url = f"{self.base_url}{endpoint}/{sys_id}"
 
         try:

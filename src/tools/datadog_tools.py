@@ -53,13 +53,13 @@ class DataDogClient:
 
         self._api_key = api_key or os.environ.get("DATADOG_API_KEY")
         self._app_key = app_key or os.environ.get("DATADOG_APP_KEY")
-        self._site = site or self._config.site
+        self._site = site or self._config.get("site", "us5")
 
         if not self._api_key or not self._app_key:
             logger.warning("DataDog API credentials not configured")
 
         self._base_url = f"https://api.{self._site}.datadoghq.com"
-        self._timeout = self._config.request.get("timeout_seconds", 30)
+        self._timeout = self._config.get("request", {}).get("timeout_seconds", 30)
 
     @property
     def headers(self) -> dict[str, str]:
@@ -90,12 +90,12 @@ class DataDogClient:
         Returns:
             List of log entries with attributes.
         """
-        query_config = self._config.query
+        query_config = self._config.get("query", {})
 
         effective_query = query or query_config.get("default_query", "status:(error OR warn)")
         effective_limit = limit or query_config.get("limit", 50)
 
-        endpoint = self._config.endpoints.get("logs_search", "/api/v2/logs/events/search")
+        endpoint = self._config.get("endpoints", {}).get("logs_search", "/api/v2/logs/events/search")
         url = f"{self._base_url}{endpoint}"
 
         body = {
@@ -171,7 +171,7 @@ class DataDogClient:
         Returns:
             Formatted string suitable for LLM context.
         """
-        formatting_config = self._config.formatting
+        formatting_config = self._config.get("formatting", {})
 
         max_logs = max_logs or formatting_config.get("max_logs_for_context", 30)
         max_message_length = formatting_config.get("max_message_length", 500)

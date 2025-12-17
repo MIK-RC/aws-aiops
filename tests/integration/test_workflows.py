@@ -1,7 +1,7 @@
 """
 Integration Tests for Workflows Module
 
-Tests for workflow coordination, including swarm and cron workflows.
+Tests for workflow coordination, including swarm and proactive workflows.
 """
 
 import pytest
@@ -12,7 +12,6 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.workflows.swarm_coordinator import AIOpsSwarm, SwarmResult
-from src.workflows.cron_workflow import DailyAnalysisWorkflow, run_daily_analysis
 
 
 class TestSwarmResult:
@@ -71,25 +70,31 @@ class TestAIOpsSwarm:
         with patch("src.workflows.swarm_coordinator.DataDogAgent"):
             with patch("src.workflows.swarm_coordinator.CodingAgent"):
                 with patch("src.workflows.swarm_coordinator.ServiceNowAgent"):
-                    with patch("src.workflows.swarm_coordinator.Swarm"):
-                        swarm = AIOpsSwarm()
+                    with patch("src.workflows.swarm_coordinator.S3Agent"):
+                        with patch("src.workflows.swarm_coordinator.Swarm"):
+                            swarm = AIOpsSwarm()
         return swarm
     
     def test_swarm_initialization(self, swarm):
         """Test swarm initializes correctly."""
-        assert swarm._datadog_agent is not None
         assert swarm._coding_agent is not None
         assert swarm._servicenow_agent is not None
     
     def test_get_agents_used_empty(self, swarm):
         """Test getting agents used when none have actions."""
-        # Need to mock the state properly
-        swarm._datadog_agent.state = Mock()
-        swarm._datadog_agent.state.total_invocations = 0
-        swarm._coding_agent.state = Mock()
-        swarm._coding_agent.state.total_invocations = 0
-        swarm._servicenow_agent.state = Mock()
-        swarm._servicenow_agent.state.total_invocations = 0
+        # Mock the agents with zero invocations
+        for agent in [swarm._coding_agent, swarm._servicenow_agent]:
+            if agent:
+                agent.state = Mock()
+                agent.state.total_invocations = 0
+        
+        if swarm._datadog_agent:
+            swarm._datadog_agent.state = Mock()
+            swarm._datadog_agent.state.total_invocations = 0
+        
+        if swarm._s3_agent:
+            swarm._s3_agent.state = Mock()
+            swarm._s3_agent.state.total_invocations = 0
         
         agents = swarm._get_agents_used()
         assert agents == []
@@ -100,112 +105,67 @@ class TestAIOpsSwarm:
         # Should not raise any errors
 
 
-class TestDailyAnalysisWorkflow:
-    """Tests for DailyAnalysisWorkflow."""
+class TestProactiveWorkflow:
+    """Tests for ProactiveWorkflow."""
     
     @pytest.fixture
     def workflow(self):
-        """Create a workflow with mocked agents."""
-        with patch("src.workflows.cron_workflow.DataDogAgent") as mock_dd:
-            with patch("src.workflows.cron_workflow.CodingAgent") as mock_code:
-                with patch("src.workflows.cron_workflow.ServiceNowAgent") as mock_sn:
-                    # Setup mock returns
+        """Create a workflow with mocked dependencies."""
+        with patch("src.workflows.proactive_workflow.DataDogAgent") as mock_dd:
+            with patch("src.workflows.proactive_workflow.S3Agent") as mock_s3:
+                with patch("src.workflows.proactive_workflow.AIOpsSwarm"):
+                    # Setup mock DataDog agent
                     mock_dd_instance = Mock()
-                    mock_dd_instance.fetch_logs.return_value = []
-                    mock_dd_instance.get_services.return_value = []
+                    mock_dd_instance._client = Mock()
+                    mock_dd_instance._client.query_logs.return_value = []
+                    mock_dd_instance._client.extract_services.return_value = set()
                     mock_dd.return_value = mock_dd_instance
                     
-                    workflow = DailyAnalysisWorkflow(dry_run=True)
+                    # Setup mock S3 agent
+                    mock_s3_instance = Mock()
+                    mock_s3.return_value = mock_s3_instance
+                    
+                    from src.workflows.proactive_workflow import ProactiveWorkflow
+                    workflow = ProactiveWorkflow()
         return workflow
     
     def test_workflow_initialization(self, workflow):
         """Test workflow initializes with correct defaults."""
-        assert workflow._time_from == "now-1d"
-        assert workflow._time_to == "now"
-        assert workflow._dry_run is True
-    
-    def test_empty_logs_report(self, workflow):
-        """Test workflow handles empty logs correctly."""
-        result = workflow.execute()
-        
-        assert result["success"] is True
-        assert result["logs"]["total_fetched"] == 0
-    
-    def test_execute_for_lambda_returns_proper_format(self, workflow):
-        """Test execute_for_lambda returns Lambda-compatible response."""
-        response = workflow.execute_for_lambda()
-        
-        assert "statusCode" in response
-        assert "body" in response
-        assert "headers" in response
-    
-    def test_build_empty_report(self, workflow):
-        """Test building empty report."""
-        report = workflow._build_empty_report("Test reason")
-        
-        assert report["success"] is True
-        assert report["summary"] == "Test reason"
-
-
-class TestRunDailyAnalysis:
-    """Tests for run_daily_analysis convenience function."""
-    
-    def test_function_creates_workflow(self):
-        """Test function creates and executes workflow."""
-        with patch("src.workflows.cron_workflow.DailyAnalysisWorkflow") as mock_workflow:
-            mock_instance = Mock()
-            mock_instance.execute.return_value = {"success": True}
-            mock_workflow.return_value = mock_instance
-            
-            result = run_daily_analysis(dry_run=True)
-            
-            mock_workflow.assert_called_once()
-            mock_instance.execute.assert_called_once()
+        assert workflow._time_from is not None
+        assert workflow._time_to is not None
+        assert workflow._max_workers > 0
 
 
 class TestWorkflowIntegration:
     """Integration tests for complete workflows."""
     
-    def test_workflow_with_mock_data(self):
-        """Test complete workflow with mock data."""
-        with patch("src.workflows.cron_workflow.DataDogAgent") as mock_dd:
-            with patch("src.workflows.cron_workflow.CodingAgent") as mock_code:
-                with patch("src.workflows.cron_workflow.ServiceNowAgent") as mock_sn:
-                    # Setup mock DataDog agent
-                    mock_dd_instance = Mock()
-                    mock_dd_instance.fetch_logs.return_value = [
-                        {"attributes": {"service": "test-service", "status": "error"}}
-                    ]
-                    mock_dd_instance.get_services.return_value = ["test-service"]
-                    mock_dd_instance.format_logs.return_value = "[ERROR] test message"
-                    mock_dd.return_value = mock_dd_instance
-                    
-                    # Setup mock Coding agent
-                    mock_code_instance = Mock()
-                    mock_code_instance.full_analysis.return_value = {
-                        "severity": {"severity": "medium"},
-                        "patterns": {"error_types": ["TestError"]},
-                        "suggestions": [],
-                        "summary": "Test summary",
-                    }
-                    mock_code.return_value = mock_code_instance
-                    
-                    # Setup mock ServiceNow agent
-                    mock_sn_instance = Mock()
-                    mock_sn_instance.create_ticket_from_analysis.return_value = {
-                        "number": "INC0012345",
-                        "sys_id": "abc123",
-                    }
-                    mock_sn.return_value = mock_sn_instance
-                    
-                    # Run workflow
-                    workflow = DailyAnalysisWorkflow(dry_run=False)
-                    result = workflow.execute()
-                    
-                    # Verify results
-                    assert result["success"] is True
-                    assert result["logs"]["total_fetched"] == 1
-                    assert "test-service" in result["logs"]["services_found"]
+    def test_swarm_with_mock_task(self):
+        """Test swarm execution with a mock task."""
+        with patch("src.workflows.swarm_coordinator.DataDogAgent") as mock_dd:
+            with patch("src.workflows.swarm_coordinator.CodingAgent") as mock_code:
+                with patch("src.workflows.swarm_coordinator.ServiceNowAgent") as mock_sn:
+                    with patch("src.workflows.swarm_coordinator.S3Agent") as mock_s3:
+                        with patch("src.workflows.swarm_coordinator.Swarm") as mock_swarm:
+                            # Setup mock agents with proper state
+                            for mock_agent_class in [mock_dd, mock_code, mock_sn, mock_s3]:
+                                mock_instance = Mock()
+                                mock_instance.state = Mock()
+                                mock_instance.state.total_invocations = 0
+                                mock_instance.reset_state = Mock()
+                                mock_agent_class.return_value = mock_instance
+                            
+                            # Setup mock swarm
+                            mock_swarm_instance = Mock()
+                            mock_swarm_instance.run.return_value = Mock(
+                                output="Test output",
+                                agent=Mock(agent_name="test_agent")
+                            )
+                            mock_swarm.return_value = mock_swarm_instance
+                            
+                            swarm = AIOpsSwarm()
+                            result = swarm.run("Test task")
+                            
+                            assert result.task == "Test task"
 
 
 if __name__ == "__main__":
