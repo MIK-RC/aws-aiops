@@ -110,9 +110,9 @@ def handle_swarm(payload: dict) -> dict:
     return result.to_dict()
 
 
-@app.health_check
+@app.ping
 def health() -> dict:
-    """Health check endpoint for AgentCore."""
+    """Health check endpoint for AgentCore (GET /ping)."""
     return {"status": "healthy", "service": "aiops-proactive-workflow"}
 
 
