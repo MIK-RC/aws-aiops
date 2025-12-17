@@ -2,17 +2,17 @@
 Proactive Workflow Module
 
 Implements the proactive analysis workflow that runs as an ECS task.
-Fetches services with issues, processes them in parallel, creates tickets,
-and uploads reports to S3.
+Uses ThreadPoolExecutor for parallel processing and Swarm for agent coordination.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from ..agents import CodingAgent, DataDogAgent, S3Agent, ServiceNowAgent
+from ..agents import DataDogAgent, S3Agent
 from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
+from .swarm_coordinator import AIOpsSwarm
 
 logger = get_logger("workflows.proactive")
 
@@ -28,321 +28,25 @@ class ServiceResult:
     s3_uri: str | None
     error: str | None
     duration_seconds: float
-
-
-class ServiceProcessor:
-    """
-    Lightweight processor for analyzing a single service (Option A).
-
-    Uses agents directly without full orchestrator overhead.
-    """
-
-    def __init__(self):
-        """Initialize the service processor with required agents."""
-        self._coding_agent = CodingAgent()
-        self._servicenow_agent = ServiceNowAgent()
-        self._s3_agent = S3Agent()
-
-    def process(
-        self,
-        service_name: str,
-        formatted_logs: str,
-        raw_logs: list[dict],
-    ) -> ServiceResult:
-        """
-        Process a single service: analyze, create ticket, upload report.
-
-        Args:
-            service_name: Name of the service to process.
-            formatted_logs: Pre-formatted log context.
-            raw_logs: Raw log entries for the service.
-
-        Returns:
-            ServiceResult with processing outcome.
-        """
-        start_time = datetime.now(UTC)
-        logger.info(f"Processing service: {service_name}")
-
-        try:
-            # Step 1: Analyze logs
-            analysis = self._coding_agent.full_analysis(
-                log_context=formatted_logs,
-                service_name=service_name,
-            )
-
-            severity = analysis.get("severity", {}).get("severity", "low")
-
-            # Step 2: Create ServiceNow ticket
-            ticket_number = None
-            if severity in ("critical", "high", "medium"):
-                ticket = self._servicenow_agent.create_ticket_from_analysis(
-                    service_name=service_name,
-                    analysis_report=analysis,
-                    log_context=formatted_logs,
-                )
-                if "error" not in ticket:
-                    ticket_number = ticket.get("number")
-
-            # Step 3: Generate and upload report
-            report_content = self._generate_report(
-                service_name=service_name,
-                analysis=analysis,
-                ticket_number=ticket_number,
-                formatted_logs=formatted_logs,
-            )
-
-            upload_result = self._s3_agent.upload_report(service_name, report_content)
-            s3_uri = upload_result.get("s3_uri") if upload_result.get("success") else None
-
-            duration = (datetime.now(UTC) - start_time).total_seconds()
-
-            return ServiceResult(
-                service_name=service_name,
-                success=True,
-                severity=severity,
-                ticket_number=ticket_number,
-                s3_uri=s3_uri,
-                error=None,
-                duration_seconds=duration,
-            )
-
-        except Exception as e:
-            duration = (datetime.now(UTC) - start_time).total_seconds()
-            logger.error(f"Failed to process {service_name}: {e}")
-
-            return ServiceResult(
-                service_name=service_name,
-                success=False,
-                severity="unknown",
-                ticket_number=None,
-                s3_uri=None,
-                error=str(e),
-                duration_seconds=duration,
-            )
-
-    def _generate_report(
-        self,
-        service_name: str,
-        analysis: dict,
-        ticket_number: str | None,
-        formatted_logs: str,
-    ) -> str:
-        """Generate a clean markdown report for a service."""
-        severity = analysis.get("severity", {})
-        patterns = analysis.get("patterns", {})
-        suggestions = analysis.get("suggestions", [])
-
-        lines = [
-            f"# Error Report: {service_name}",
-            "",
-            f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
-            "",
-            "## Summary",
-            f"- Severity: {severity.get('severity', 'unknown').upper()}",
-            f"- Error types: {len(patterns.get('error_types', []))}",
-            f"- Recurring issues: {len(patterns.get('recurring_issues', []))}",
-        ]
-
-        if ticket_number:
-            lines.append(f"- ServiceNow ticket: {ticket_number}")
-
-        lines.append("")
-
-        # Error types
-        if patterns.get("error_types"):
-            lines.append("## Errors Detected")
-            for error_type in patterns["error_types"]:
-                lines.append(f"- {error_type}")
-            lines.append("")
-
-        # Potential causes
-        if patterns.get("potential_causes"):
-            lines.append("## Root Cause Analysis")
-            for cause in patterns["potential_causes"]:
-                lines.append(f"- {cause}")
-            lines.append("")
-
-        # Suggested fixes
-        if suggestions:
-            lines.append("## Suggested Fixes")
-            for i, suggestion in enumerate(suggestions, 1):
-                lines.append(f"### {i}. {suggestion.get('error_type', 'General')}")
-                lines.append(f"**Issue:** {suggestion.get('issue', 'N/A')}")
-                lines.append(f"**Fix:** {suggestion.get('suggestion', 'N/A')}")
-                if suggestion.get("prevention"):
-                    lines.append(f"**Prevention:** {suggestion['prevention']}")
-                lines.append("")
-
-        # Log context
-        if formatted_logs:
-            lines.append("## Related Logs")
-            lines.append("```")
-            # Limit to first 50 lines
-            log_lines = formatted_logs.split("\n")[:50]
-            lines.extend(log_lines)
-            if len(formatted_logs.split("\n")) > 50:
-                lines.append("... (truncated)")
-            lines.append("```")
-
-        return "\n".join(lines)
-
-
-class OrchestratorProcessor:
-    """
-    Full orchestrator-based processor for a single service (Option B).
-
-    Uses the OrchestratorAgent for each service with full LLM reasoning.
-    """
-
-    def __init__(self):
-        """Initialize with required agents."""
-        # Import here to avoid circular dependency
-        from ..agents import OrchestratorAgent
-
-        self._OrchestratorAgent = OrchestratorAgent
-        self._s3_agent = S3Agent()
-
-    def process(
-        self,
-        service_name: str,
-        formatted_logs: str,
-        raw_logs: list[dict],
-    ) -> ServiceResult:
-        """
-        Process a single service using full orchestrator.
-
-        Args:
-            service_name: Name of the service to process.
-            formatted_logs: Pre-formatted log context.
-            raw_logs: Raw log entries for the service.
-
-        Returns:
-            ServiceResult with processing outcome.
-        """
-        start_time = datetime.now(UTC)
-        logger.info(f"Processing service with orchestrator: {service_name}")
-
-        try:
-            # Create orchestrator for this service
-            orchestrator = self._OrchestratorAgent(
-                session_id=f"proactive-{service_name}-{start_time.strftime('%Y%m%d%H%M%S')}",
-                use_s3_storage=False,
-            )
-
-            # Invoke orchestrator with analysis request
-            prompt = f"""Analyze the following logs for service '{service_name}' and:
-1. Identify error patterns and root causes
-2. Assess severity
-3. Suggest fixes
-4. Create a ServiceNow ticket if severity is medium or higher
-
-Logs:
-{formatted_logs}"""
-
-            response = orchestrator.invoke(prompt)
-
-            # Get analysis from orchestrator's sub-agents
-            severity = "medium"  # Default
-            ticket_number = None
-
-            # Check if ticket was created
-            if orchestrator._servicenow_agent:
-                for action in orchestrator._servicenow_agent.action_history:
-                    if action.action_type == "create_ticket" and action.success:
-                        ticket_number = action.output_summary.split(":")[-1].strip()
-                        break
-
-            # Check severity from coding agent
-            if orchestrator._coding_agent:
-                for action in orchestrator._coding_agent.action_history:
-                    if "severity" in action.output_summary.lower():
-                        if "critical" in action.output_summary.lower():
-                            severity = "critical"
-                        elif "high" in action.output_summary.lower():
-                            severity = "high"
-                        elif "medium" in action.output_summary.lower():
-                            severity = "medium"
-                        else:
-                            severity = "low"
-                        break
-
-            # Generate and upload report
-            report_content = self._generate_report(
-                service_name=service_name,
-                response=response,
-                ticket_number=ticket_number,
-                severity=severity,
-            )
-
-            upload_result = self._s3_agent.upload_report(service_name, report_content)
-            s3_uri = upload_result.get("s3_uri") if upload_result.get("success") else None
-
-            duration = (datetime.now(UTC) - start_time).total_seconds()
-
-            return ServiceResult(
-                service_name=service_name,
-                success=True,
-                severity=severity,
-                ticket_number=ticket_number,
-                s3_uri=s3_uri,
-                error=None,
-                duration_seconds=duration,
-            )
-
-        except Exception as e:
-            duration = (datetime.now(UTC) - start_time).total_seconds()
-            logger.error(f"Failed to process {service_name}: {e}")
-
-            return ServiceResult(
-                service_name=service_name,
-                success=False,
-                severity="unknown",
-                ticket_number=None,
-                s3_uri=None,
-                error=str(e),
-                duration_seconds=duration,
-            )
-
-    def _generate_report(
-        self,
-        service_name: str,
-        response: str,
-        ticket_number: str | None,
-        severity: str,
-    ) -> str:
-        """Generate a clean markdown report from orchestrator response."""
-        lines = [
-            f"# Error Report: {service_name}",
-            "",
-            f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}",
-            "",
-            "## Summary",
-            f"- Severity: {severity.upper()}",
-        ]
-
-        if ticket_number:
-            lines.append(f"- ServiceNow ticket: {ticket_number}")
-
-        lines.extend([
-            "",
-            "## Analysis",
-            "",
-            response,
-        ])
-
-        return "\n".join(lines)
+    agents_used: list[str]
 
 
 class ProactiveWorkflow:
     """
     Proactive Analysis Workflow for ECS execution.
 
-    This workflow is triggered by EventBridge and:
+    Triggered by EventBridge, this workflow:
     1. Fetches all services with errors/warnings from DataDog
     2. Processes each service in parallel using ThreadPoolExecutor
-    3. Creates ServiceNow tickets for significant issues
-    4. Uploads individual reports to S3
-    5. Generates and uploads a summary report
+    3. Uses AIOpsSwarm for agent coordination per service
+    4. Uploads individual reports and summary to S3
+
+    Architecture:
+        DataDog Agent (fetch all) → ThreadPoolExecutor
+                                        ├── Service A → Swarm (Coding, ServiceNow, S3)
+                                        ├── Service B → Swarm (Coding, ServiceNow, S3)
+                                        └── Service C → Swarm (Coding, ServiceNow, S3)
+                                    → S3 Summary
     """
 
     def __init__(self):
@@ -353,22 +57,18 @@ class ProactiveWorkflow:
         self._time_from = workflow_config.get("default_time_from", "now-1d")
         self._time_to = workflow_config.get("default_time_to", "now")
         self._max_workers = workflow_config.get("max_workers", 50)
-        self._use_lightweight = workflow_config.get("use_lightweight_processor", False)
 
-        # Initialize DataDog agent for fetching logs
+        # DataDog agent for initial log fetch
         self._datadog_agent = DataDogAgent()
+
+        # S3 agent for summary upload
         self._s3_agent = S3Agent()
 
         # Workflow state
         self._start_time: datetime | None = None
         self._end_time: datetime | None = None
-        self._results: list[ServiceResult] = []
 
-        logger.info(
-            f"Initialized ProactiveWorkflow: "
-            f"max_workers={self._max_workers}, "
-            f"lightweight={self._use_lightweight}"
-        )
+        logger.info(f"Initialized ProactiveWorkflow: max_workers={self._max_workers}")
 
     def run(self) -> dict:
         """
@@ -393,7 +93,7 @@ class ProactiveWorkflow:
             # Step 2: Prepare data for each service
             service_data = self._prepare_service_data(logs, services)
 
-            # Step 3: Process services in parallel
+            # Step 3: Process services in parallel using Swarm
             results = self._process_services_parallel(service_data)
 
             # Step 4: Generate and upload summary
@@ -436,20 +136,11 @@ class ProactiveWorkflow:
         service_data = []
 
         for service in services:
-            # Filter logs for this service
-            service_logs = [
-                log
-                for log in logs
-                if log.get("attributes", {}).get("service") == service
-            ]
-
-            # Format logs
             formatted = self._datadog_agent.format_logs(logs, service=service)
 
             service_data.append({
                 "service_name": service,
                 "formatted_logs": formatted,
-                "raw_logs": service_logs,
             })
 
         return service_data
@@ -458,30 +149,19 @@ class ProactiveWorkflow:
         self,
         service_data: list[dict],
     ) -> list[ServiceResult]:
-        """Process all services in parallel using ThreadPoolExecutor."""
+        """Process all services in parallel using Swarm."""
         results = []
 
-        # Create processor based on configuration
-        if self._use_lightweight:
-            logger.info("Using lightweight processor (Option A)")
-            processor = ServiceProcessor()
-        else:
-            logger.info("Using orchestrator processor (Option B)")
-            processor = OrchestratorProcessor()
-
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            # Submit all tasks
             future_to_service = {
                 executor.submit(
-                    processor.process,
+                    self._process_single_service,
                     data["service_name"],
                     data["formatted_logs"],
-                    data["raw_logs"],
                 ): data["service_name"]
                 for data in service_data
             }
 
-            # Collect results as they complete
             for future in as_completed(future_to_service):
                 service_name = future_to_service[future]
                 try:
@@ -503,10 +183,104 @@ class ProactiveWorkflow:
                             s3_uri=None,
                             error=str(e),
                             duration_seconds=0,
+                            agents_used=[],
                         )
                     )
 
         return results
+
+    def _process_single_service(
+        self,
+        service_name: str,
+        formatted_logs: str,
+    ) -> ServiceResult:
+        """
+        Process a single service using the Swarm.
+
+        The Swarm coordinates agents to:
+        1. Analyze the logs (Coding Agent)
+        2. Create ticket if needed (ServiceNow Agent)
+        3. Upload report to S3 (S3 Agent)
+        """
+        start_time = datetime.now(UTC)
+        logger.info(f"Processing service with Swarm: {service_name}")
+
+        try:
+            # Create a fresh Swarm for this service (no DataDog needed, we have logs)
+            swarm = AIOpsSwarm(include_datadog=False, include_s3=True)
+
+            # Build the task prompt
+            task = f"""Analyze the following logs for service '{service_name}':
+
+{formatted_logs}
+
+Please:
+1. Identify error patterns and assess severity (critical/high/medium/low)
+2. Suggest fixes for the issues found
+3. If severity is medium or higher, create a ServiceNow ticket
+4. Upload a report to S3 with your analysis
+
+Service name: {service_name}
+"""
+
+            # Run the Swarm
+            swarm_result = swarm.run(task)
+
+            # Extract results
+            severity = self._extract_severity(swarm_result.output)
+            ticket_number = self._extract_ticket_number(swarm_result.output)
+            s3_uri = self._extract_s3_uri(swarm_result.output)
+
+            duration = (datetime.now(UTC) - start_time).total_seconds()
+
+            return ServiceResult(
+                service_name=service_name,
+                success=swarm_result.success,
+                severity=severity,
+                ticket_number=ticket_number,
+                s3_uri=s3_uri,
+                error=swarm_result.error if not swarm_result.success else None,
+                duration_seconds=duration,
+                agents_used=swarm_result.agents_used,
+            )
+
+        except Exception as e:
+            duration = (datetime.now(UTC) - start_time).total_seconds()
+            logger.error(f"Failed to process {service_name}: {e}")
+
+            return ServiceResult(
+                service_name=service_name,
+                success=False,
+                severity="unknown",
+                ticket_number=None,
+                s3_uri=None,
+                error=str(e),
+                duration_seconds=duration,
+                agents_used=[],
+            )
+
+    def _extract_severity(self, output: str) -> str:
+        """Extract severity from Swarm output."""
+        output_lower = output.lower()
+        if "critical" in output_lower:
+            return "critical"
+        elif "high" in output_lower:
+            return "high"
+        elif "medium" in output_lower:
+            return "medium"
+        return "low"
+
+    def _extract_ticket_number(self, output: str) -> str | None:
+        """Extract ticket number from Swarm output."""
+        import re
+        match = re.search(r"INC\d+", output)
+        return match.group(0) if match else None
+
+    def _extract_s3_uri(self, output: str) -> str | None:
+        """Extract S3 URI from Swarm output."""
+        import re
+        match = re.search(r"s3://[^\s]+", output)
+        return match.group(0) if match else None
 
     def _upload_summary(self, results: list[ServiceResult]) -> None:
         """Generate and upload the summary report."""
@@ -524,7 +298,6 @@ class ProactiveWorkflow:
         successful = [r for r in results if r.success]
         failed = [r for r in results if not r.success]
 
-        # Count by severity
         severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for r in successful:
             if r.severity in severity_counts:
@@ -561,9 +334,8 @@ class ProactiveWorkflow:
         if successful:
             lines.append("## Service Reports")
             for r in successful:
-                status = f"[{r.severity.upper()}]"
-                ticket_info = f" - Ticket: {r.ticket_number}" if r.ticket_number else ""
-                lines.append(f"- {r.service_name} {status}{ticket_info}")
+                agents = ", ".join(r.agents_used) if r.agents_used else "None"
+                lines.append(f"- {r.service_name} [{r.severity.upper()}] - Agents: {agents}")
                 if r.s3_uri:
                     lines.append(f"  Report: {r.s3_uri}")
             lines.append("")

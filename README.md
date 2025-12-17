@@ -34,10 +34,11 @@ EventBridge (scheduled trigger)
 │  │                                                          │ │
 │  │  2. ThreadPoolExecutor (50 workers)                      │ │
 │  │     ┌────────────────────────────────────────────────┐   │ │
-│  │     │  Per Service:                                  │   │ │
+│  │     │  Per Service → AIOpsSwarm:                     │   │ │
 │  │     │  • Coding Agent → Analyze errors               │   │ │
 │  │     │  • ServiceNow Agent → Create ticket            │   │ │
 │  │     │  • S3 Agent → Upload report                    │   │ │
+│  │     │  (Agents coordinate via Swarm handoffs)        │   │ │
 │  │     └────────────────────────────────────────────────┘   │ │
 │  │                                                          │ │
 │  │  3. S3 Agent → Upload summary                            │ │
@@ -55,6 +56,11 @@ EventBridge (scheduled trigger)
 │          └── .md │
 └──────────────────┘
 ```
+
+The workflow uses **Swarm** for agent coordination within each service, enabling:
+- LLM-driven agent handoffs
+- Easy addition of new agents (e.g., Remediation Agent)
+- Autonomous decision-making per service
 
 ## Agents
 
@@ -218,7 +224,8 @@ aiops-proactive-workflow/
 │   │   ├── servicenow_tools.py
 │   │   └── s3_tools.py
 │   ├── workflows/
-│   │   └── proactive_workflow.py
+│   │   ├── swarm_coordinator.py  # AIOpsSwarm for agent coordination
+│   │   └── proactive_workflow.py # Main workflow with parallel processing
 │   ├── utils/
 │   │   ├── config_loader.py
 │   │   └── logging_config.py
