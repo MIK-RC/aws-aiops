@@ -10,7 +10,7 @@ import logging
 import sys
 from datetime import datetime
 
-from .config_loader import get_config
+from .config_loader import load_settings
 
 
 class JSONFormatter(logging.Formatter):
@@ -116,13 +116,13 @@ def setup_logging(
         # Override with custom settings
         setup_logging(level="DEBUG", json_format=True)
     """
-    config = get_config()
-    logging_config = config.settings.logging
+    settings = load_settings()
+    logging_config = settings.get("logging", {})
 
     # Resolve settings (args override config)
-    effective_level = level or logging_config.level
-    effective_json = json_format if json_format is not None else logging_config.json_format
-    effective_format = log_format or logging_config.format
+    effective_level = level or logging_config.get("level", "INFO")
+    effective_json = json_format if json_format is not None else logging_config.get("json_format", False)
+    effective_format = log_format or logging_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     # Get the root logger
     root_logger = logging.getLogger()

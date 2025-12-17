@@ -10,7 +10,7 @@ import os
 import requests
 from strands import tool
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_tools_config
 from ..utils.logging_config import get_logger
 
 logger = get_logger("tools.datadog")
@@ -49,7 +49,7 @@ class DataDogClient:
             app_key: DataDog Application key. Defaults to DATADOG_APP_KEY env var.
             site: DataDog site (us1, us3, us5, eu1, ap1). Defaults to config.
         """
-        self._config = get_config().tools.datadog
+        self._config = load_tools_config().get("datadog", {})
 
         self._api_key = api_key or os.environ.get("DATADOG_API_KEY")
         self._app_key = app_key or os.environ.get("DATADOG_APP_KEY")

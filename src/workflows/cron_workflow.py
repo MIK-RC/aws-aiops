@@ -9,7 +9,7 @@ import json
 from datetime import UTC, datetime
 
 from ..agents import CodingAgent, DataDogAgent, ServiceNowAgent  # , OrchestratorAgent
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 
 logger = get_logger("workflows.cron")
@@ -56,14 +56,15 @@ class DailyAnalysisWorkflow:
             min_severity_for_ticket: Minimum severity to create tickets.
             dry_run: If True, don't create actual tickets.
         """
-        config = get_config()
-        cron_config = config.settings.cron
+        settings = load_settings()
+        workflow_config = settings.get("workflow", {})
+        features = settings.get("features", {})
 
-        self._time_from = time_from or cron_config.default_time_from
-        self._time_to = time_to or cron_config.default_time_to
+        self._time_from = time_from or workflow_config.get("default_time_from", "now-1d")
+        self._time_to = time_to or workflow_config.get("default_time_to", "now")
         self._create_tickets = create_tickets
         self._min_severity = min_severity_for_ticket
-        self._dry_run = dry_run or config.settings.features.dry_run_mode
+        self._dry_run = dry_run or features.get("dry_run_mode", False)
 
         # Initialize agents
         self._datadog_agent = DataDogAgent()

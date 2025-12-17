@@ -10,7 +10,7 @@ from enum import Enum
 
 from strands.session import FileSessionManager, S3SessionManager, SessionManager
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 
 logger = get_logger("memory.session")
@@ -72,7 +72,9 @@ class SessionManagerFactory:
         Returns:
             Configured SessionManager instance.
         """
-        config = get_config().settings
+        settings = load_settings()
+        session_config = settings.get("session", {})
+        aws_config = settings.get("aws", {})
 
         # Determine backend
         if backend is None:
@@ -84,7 +86,7 @@ class SessionManagerFactory:
                 backend = StorageBackend.FILE
             else:
                 # Default to S3 if bucket is configured, otherwise file
-                if config.session.bucket or bucket:
+                if session_config.get("bucket") or bucket:
                     backend = StorageBackend.S3
                 else:
                     backend = StorageBackend.FILE
@@ -92,9 +94,9 @@ class SessionManagerFactory:
         if backend == StorageBackend.S3:
             return SessionManagerFactory._create_s3_manager(
                 session_id=session_id,
-                bucket=bucket or config.session.bucket,
-                prefix=prefix or config.session.prefix,
-                region=region or config.aws.region,
+                bucket=bucket or session_config.get("bucket", "aiops-agent-sessions"),
+                prefix=prefix or session_config.get("prefix", "sessions/"),
+                region=region or aws_config.get("region", "us-east-1"),
             )
         else:
             return SessionManagerFactory._create_file_manager(

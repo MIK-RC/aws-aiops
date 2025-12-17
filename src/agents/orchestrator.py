@@ -7,7 +7,7 @@ Maintains conversation history and generates comprehensive reports.
 
 from strands.session import FileSessionManager, S3SessionManager
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 from .base import BaseAgent
 from .coding_agent import CodingAgent
@@ -106,11 +106,12 @@ class OrchestratorAgent(BaseAgent):
         storage_dir: str | None,
     ):
         """Create the appropriate session manager."""
-        config = get_config().settings.session
+        settings = load_settings()
+        session_config = settings.get("session", {})
 
         if use_s3:
-            bucket = s3_bucket or config.bucket
-            prefix = s3_prefix or config.prefix
+            bucket = s3_bucket or session_config.get("bucket", "aiops-agent-sessions")
+            prefix = s3_prefix or session_config.get("prefix", "sessions/")
 
             _module_logger.info(f"Using S3 session storage: s3://{bucket}/{prefix}")
             return S3SessionManager(

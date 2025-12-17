@@ -9,7 +9,7 @@ import re
 
 from strands import tool
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_tools_config
 from ..utils.logging_config import get_logger
 
 logger = get_logger("tools.code_analysis")
@@ -29,7 +29,7 @@ class CodeAnalyzer:
 
     def __init__(self):
         """Initialize the code analyzer."""
-        self._config = get_config().tools.code_analysis
+        self._config = load_tools_config().get("code_analysis", {})
         self._severity_keywords = self._config.analysis.get("severity_keywords", {})
 
     def analyze_patterns(self, log_context: str) -> dict:

@@ -10,7 +10,7 @@ import os
 import requests
 from strands import tool
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_tools_config
 from ..utils.logging_config import get_logger
 
 logger = get_logger("tools.servicenow")
@@ -53,7 +53,7 @@ class ServiceNowClient:
             username: ServiceNow username. Defaults to SERVICENOW_USER env var.
             password: ServiceNow password. Defaults to SERVICENOW_PASS env var.
         """
-        self._config = get_config().tools.servicenow
+        self._config = load_tools_config().get("servicenow", {})
 
         self._instance = instance or os.environ.get("SERVICENOW_INSTANCE")
         self._username = username or os.environ.get("SERVICENOW_USER", "")

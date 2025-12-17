@@ -12,7 +12,7 @@ import boto3
 from botocore.exceptions import ClientError
 from strands import tool
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 
 logger = get_logger("tools.s3")
@@ -45,10 +45,10 @@ class S3Client:
             bucket: S3 bucket name. Defaults to S3_REPORTS_BUCKET env var.
             region: AWS region. Defaults to config.
         """
-        self._config = get_config()
+        settings = load_settings()
 
         self._bucket = bucket or os.environ.get("S3_REPORTS_BUCKET")
-        self._region = region or self._config.settings.aws.region
+        self._region = region or settings.get("aws", {}).get("region", "us-east-1")
 
         if not self._bucket:
             logger.warning("S3 reports bucket not configured")

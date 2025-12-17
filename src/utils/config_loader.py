@@ -1,8 +1,7 @@
 """
 Configuration Loader Module
 
-Loads and manages YAML configuration files for the AIOps Multi-Agent System.
-Supports environment variable overrides and provides type-safe access to config values.
+Simple functions to load YAML configuration files.
 """
 
 import os
@@ -13,68 +12,139 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-# Load .env file automatically
-# Looks for .env in current directory and parent directories
 load_dotenv()
 
-
-class AWSConfig(BaseModel):
-    """AWS-specific configuration."""
-
-    region: str = "us-east-1"
-    bedrock_endpoint: str | None = None
+# Cached raw configs
+_raw_configs: dict[str, dict] = {}
+_config_dir: Path | None = None
 
 
-class SessionConfig(BaseModel):
-    """Session/memory storage configuration."""
+def _get_config_dir() -> Path:
+    """Resolve the configuration directory path."""
+    global _config_dir
 
-    bucket: str = "aiops-agent-sessions"
-    prefix: str = "sessions/"
-    ttl: int = 604800  # 7 days
+    if _config_dir is not None:
+        return _config_dir
 
+    # Try environment variable
+    env_config_dir = os.environ.get("AIOPS_CONFIG_DIR")
+    if env_config_dir:
+        _config_dir = Path(env_config_dir)
+        return _config_dir
 
-class LoggingConfig(BaseModel):
-    """Logging configuration."""
+    # Walk up from current file to find config directory
+    current = Path(__file__).parent
+    while current != current.parent:
+        config_path = current / "config"
+        if config_path.exists():
+            _config_dir = config_path
+            return _config_dir
+        current = current.parent
 
-    level: str = "INFO"
-    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    json_format: bool = False
-
-
-class CronConfig(BaseModel):
-    """Cron job configuration."""
-
-    default_time_from: str = "now-1d"
-    default_time_to: str = "now"
-    schedule: str = "cron(0 6 * * ? *)"
-
-
-class RateLimitsConfig(BaseModel):
-    """Rate limiting and safety configuration."""
-
-    max_agent_iterations: int = 20
-    max_handoffs: int = 15
-    execution_timeout_seconds: int = 900
-    node_timeout_seconds: int = 300
+    # Fallback to relative path
+    _config_dir = Path("config")
+    return _config_dir
 
 
-class FeaturesConfig(BaseModel):
-    """Feature flags."""
+def _load_yaml(filename: str) -> dict:
+    """Load a YAML file and cache it."""
+    if filename in _raw_configs:
+        return _raw_configs[filename]
 
-    enable_ticket_creation: bool = True
-    enable_notifications: bool = False
-    dry_run_mode: bool = False
+    filepath = _get_config_dir() / filename
+
+    if not filepath.exists():
+        _raw_configs[filename] = {}
+        return {}
+
+    with open(filepath) as f:
+        data = yaml.safe_load(f) or {}
+        _raw_configs[filename] = data
+        return data
 
 
-class SettingsConfig(BaseModel):
-    """Main settings configuration model."""
+def load_settings() -> dict:
+    """
+    Load settings.yaml as a dictionary.
 
-    aws: AWSConfig = Field(default_factory=AWSConfig)
-    session: SessionConfig = Field(default_factory=SessionConfig)
-    logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    cron: CronConfig = Field(default_factory=CronConfig)
-    rate_limits: RateLimitsConfig = Field(default_factory=RateLimitsConfig)
-    features: FeaturesConfig = Field(default_factory=FeaturesConfig)
+    Returns:
+        Settings configuration dict.
+
+    Usage:
+        settings = load_settings()
+        region = settings.get("aws", {}).get("region", "us-east-1")
+    """
+    return _load_yaml("settings.yaml")
+
+
+def load_tools_config() -> dict:
+    """
+    Load tools.yaml as a dictionary.
+
+    Returns:
+        Tools configuration dict.
+
+    Usage:
+        tools = load_tools_config()
+        datadog_config = tools.get("datadog", {})
+    """
+    return _load_yaml("tools.yaml")
+
+
+def load_agents_config() -> dict:
+    """
+    Load agents.yaml as a dictionary.
+
+    Returns:
+        Agents configuration dict.
+
+    Usage:
+        agents = load_agents_config()
+        orchestrator = agents.get("orchestrator", {})
+    """
+    return _load_yaml("agents.yaml")
+
+
+def get_agent_config(agent_name: str) -> dict:
+    """
+    Get configuration for a specific agent.
+
+    Args:
+        agent_name: Name of the agent (orchestrator, datadog, coding, servicenow, s3).
+
+    Returns:
+        Agent configuration dict with defaults applied.
+
+    Usage:
+        config = get_agent_config("orchestrator")
+        model_id = config.get("model_id")
+    """
+    agents = load_agents_config()
+    defaults = agents.get("defaults", {})
+    agent_config = agents.get(agent_name, {})
+
+    # Merge defaults with agent-specific config
+    result = {**defaults, **agent_config}
+
+    # Ensure required fields have defaults
+    result.setdefault("name", agent_name)
+    result.setdefault("description", f"{agent_name} agent")
+    result.setdefault("model_id", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+    result.setdefault("max_tokens", 4096)
+    result.setdefault("system_prompt", "")
+
+    return result
+
+
+def reload_configs() -> None:
+    """Clear cached configs to force reload on next access."""
+    global _raw_configs
+    _raw_configs.clear()
+
+
+# =============================================================================
+# Pydantic Models (for backward compatibility with existing code)
+# =============================================================================
 
 
 class AgentConfig(BaseModel):
@@ -87,291 +157,94 @@ class AgentConfig(BaseModel):
     system_prompt: str = ""
 
 
-class AgentsConfig(BaseModel):
-    """All agents configuration."""
-
-    defaults: dict = Field(default_factory=dict)
-    orchestrator: AgentConfig
-    datadog: AgentConfig
-    coding: AgentConfig
-    servicenow: AgentConfig
-
-
-class DataDogToolConfig(BaseModel):
-    """DataDog tool configuration."""
-
-    site: str = "us5"
-    endpoints: dict = Field(default_factory=dict)
-    query: dict = Field(default_factory=dict)
-    request: dict = Field(default_factory=dict)
-    formatting: dict = Field(default_factory=dict)
-
-
-class ServiceNowToolConfig(BaseModel):
-    """ServiceNow tool configuration."""
-
-    endpoints: dict = Field(default_factory=dict)
-    defaults: dict = Field(default_factory=dict)
-    priority_mapping: dict = Field(default_factory=dict)
-    request: dict = Field(default_factory=dict)
-
-
-class CodeAnalysisToolConfig(BaseModel):
-    """Code analysis tool configuration."""
-
-    analysis: dict = Field(default_factory=dict)
-    output: dict = Field(default_factory=dict)
-
-
-class ToolsConfig(BaseModel):
-    """All tools configuration."""
-
-    datadog: DataDogToolConfig = Field(default_factory=DataDogToolConfig)
-    servicenow: ServiceNowToolConfig = Field(default_factory=ServiceNowToolConfig)
-    code_analysis: CodeAnalysisToolConfig = Field(default_factory=CodeAnalysisToolConfig)
+# =============================================================================
+# Legacy ConfigLoader class (for backward compatibility)
+# =============================================================================
 
 
 class ConfigLoader:
     """
-    Configuration loader that reads YAML files and provides access to config values.
+    Legacy configuration loader class.
 
-    Supports:
-    - Loading multiple config files (settings, agents, tools)
-    - Environment variable overrides
-    - Type-safe access via Pydantic models
-    - Singleton pattern for global access
-
-    Usage:
-        # Initialize with config directory
-        config = ConfigLoader(config_dir="config")
-
-        # Access configurations
-        settings = config.settings
-        agents = config.agents
-        tools = config.tools
-
-        # Get specific agent config
-        orchestrator_config = config.get_agent_config("orchestrator")
+    Kept for backward compatibility. New code should use the simple functions:
+    - load_settings()
+    - load_tools_config()
+    - load_agents_config()
+    - get_agent_config(name)
     """
 
     _instance: "ConfigLoader | None" = None
 
     def __new__(cls, config_dir: str | None = None) -> "ConfigLoader":
-        """Singleton pattern - return existing instance if available."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self, config_dir: str | None = None):
-        """
-        Initialize the configuration loader.
-
-        Args:
-            config_dir: Path to configuration directory. Defaults to 'config' in project root.
-        """
-        if self._initialized:
+        if getattr(self, "_initialized", False):
             return
-
-        self._config_dir = self._resolve_config_dir(config_dir)
-        self._raw_configs: dict[str, dict] = {}
-
-        # Load all configuration files
-        self._load_all_configs()
-
-        # Parse into typed models
-        self._settings: SettingsConfig | None = None
-        self._agents: AgentsConfig | None = None
-        self._tools: ToolsConfig | None = None
-
         self._initialized = True
 
-    def _resolve_config_dir(self, config_dir: str | None) -> Path:
-        """Resolve the configuration directory path."""
-        if config_dir:
-            return Path(config_dir)
-
-        # Try environment variable
-        env_config_dir = os.environ.get("AIOPS_CONFIG_DIR")
-        if env_config_dir:
-            return Path(env_config_dir)
-
-        # Default to 'config' in project root
-        # Walk up from current file to find project root
-        current = Path(__file__).parent
-        while current != current.parent:
-            config_path = current / "config"
-            if config_path.exists():
-                return config_path
-            current = current.parent
-
-        # Fallback to relative path
-        return Path("config")
-
-    def _load_yaml_file(self, filename: str) -> dict:
-        """Load a single YAML configuration file."""
-        filepath = self._config_dir / filename
-
-        if not filepath.exists():
-            raise FileNotFoundError(f"Configuration file not found: {filepath}")
-
-        with open(filepath) as f:
-            return yaml.safe_load(f) or {}
-
-    def _load_all_configs(self) -> None:
-        """Load all configuration files."""
-        config_files = ["settings.yaml", "agents.yaml", "tools.yaml"]
-
-        for filename in config_files:
-            config_name = filename.replace(".yaml", "")
-            try:
-                self._raw_configs[config_name] = self._load_yaml_file(filename)
-            except FileNotFoundError:
-                # Use empty dict for missing configs
-                self._raw_configs[config_name] = {}
-
-    def _apply_env_overrides(self, config: dict, prefix: str = "AIOPS") -> dict:
-        """
-        Apply environment variable overrides to configuration.
-
-        Environment variables follow the pattern: {PREFIX}_{SECTION}_{KEY}
-        Example: AIOPS_AWS_REGION=us-west-2
-        """
-        result = config.copy()
-
-        for key, value in os.environ.items():
-            if not key.startswith(f"{prefix}_"):
-                continue
-
-            # Parse the environment variable name
-            parts = key[len(prefix) + 1 :].lower().split("_")
-
-            # Navigate to the correct nested dict
-            current = result
-            for part in parts[:-1]:
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-
-            # Set the value (try to parse as appropriate type)
-            final_key = parts[-1]
-            current[final_key] = self._parse_env_value(value)
-
-        return result
-
-    def _parse_env_value(self, value: str) -> Any:
-        """Parse environment variable value to appropriate type."""
-        # Boolean
-        if value.lower() in ("true", "false"):
-            return value.lower() == "true"
-
-        # Integer
-        try:
-            return int(value)
-        except ValueError:
-            pass
-
-        # Float
-        try:
-            return float(value)
-        except ValueError:
-            pass
-
-        # String
-        return value
+    @property
+    def settings(self) -> Any:
+        """Get settings as an object with attribute access."""
+        return _DictWrapper(load_settings())
 
     @property
-    def settings(self) -> SettingsConfig:
-        """Get the settings configuration."""
-        if self._settings is None:
-            raw = self._apply_env_overrides(self._raw_configs.get("settings", {}))
-            self._settings = SettingsConfig(**raw)
-        return self._settings
+    def tools(self) -> Any:
+        """Get tools config as an object with attribute access."""
+        return _DictWrapper(load_tools_config())
 
     @property
-    def agents(self) -> AgentsConfig:
-        """Get the agents configuration."""
-        if self._agents is None:
-            raw = self._raw_configs.get("agents", {})
-            self._agents = AgentsConfig(**raw)
-        return self._agents
-
-    @property
-    def tools(self) -> ToolsConfig:
-        """Get the tools configuration."""
-        if self._tools is None:
-            raw = self._raw_configs.get("tools", {})
-            self._tools = ToolsConfig(**raw)
-        return self._tools
+    def agents(self) -> Any:
+        """Get agents config as an object with attribute access."""
+        return _DictWrapper(load_agents_config())
 
     def get_agent_config(self, agent_name: str) -> AgentConfig:
-        """
-        Get configuration for a specific agent.
-
-        Args:
-            agent_name: Name of the agent (orchestrator, datadog, coding, servicenow)
-
-        Returns:
-            AgentConfig for the specified agent
-
-        Raises:
-            ValueError: If agent_name is not found
-        """
-        agents = self.agents
-
-        if hasattr(agents, agent_name):
-            return getattr(agents, agent_name)
-
-        raise ValueError(f"Unknown agent: {agent_name}")
+        """Get typed agent configuration."""
+        config = get_agent_config(agent_name)
+        return AgentConfig(**config)
 
     def get_raw_config(self, config_name: str) -> dict:
-        """Get raw (untyped) configuration dictionary."""
-        return self._raw_configs.get(config_name, {})
+        """Get raw configuration dictionary."""
+        if config_name == "settings":
+            return load_settings()
+        elif config_name == "tools":
+            return load_tools_config()
+        elif config_name == "agents":
+            return load_agents_config()
+        return {}
 
     def reload(self) -> None:
-        """Reload all configuration files."""
-        self._raw_configs.clear()
-        self._settings = None
-        self._agents = None
-        self._tools = None
-        self._load_all_configs()
+        """Reload all configurations."""
+        reload_configs()
 
 
-# Global config instance getter
+class _DictWrapper:
+    """Wrapper to allow dict access via attributes."""
+
+    def __init__(self, data: dict):
+        self._data = data
+
+    def __getattr__(self, name: str) -> Any:
+        value = self._data.get(name)
+        if isinstance(value, dict):
+            return _DictWrapper(value)
+        return value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._data.get(key, default)
+
+
 def get_config(config_dir: str | None = None) -> ConfigLoader:
     """
-    Get the global configuration loader instance.
+    Get the configuration loader instance.
 
-    Args:
-        config_dir: Optional path to configuration directory.
-                   Only used on first call.
-
-    Returns:
-        ConfigLoader instance
-
-    Usage:
-        from src.utils import get_config
-
-        config = get_config()
-        aws_region = config.settings.aws.region
+    For new code, prefer using the simple functions directly:
+    - load_settings()
+    - load_tools_config()
+    - load_agents_config()
+    - get_agent_config(name)
     """
     return ConfigLoader(config_dir)
-
-
-def load_settings() -> dict:
-    """
-    Load settings.yaml as a plain dictionary.
-
-    Simple function for direct config access without Pydantic validation.
-
-    Returns:
-        Raw settings dictionary.
-
-    Usage:
-        from src.utils.config_loader import load_settings
-
-        settings = load_settings()
-        max_workers = settings.get("workflow", {}).get("max_workers", 50)
-    """
-    config = get_config()
-    return config.get_raw_config("settings")

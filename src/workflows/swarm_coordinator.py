@@ -9,7 +9,7 @@ Enables autonomous collaboration between DataDog, Coding, and ServiceNow agents.
 from strands.multiagent import Swarm
 
 from ..agents import CodingAgent, DataDogAgent, ServiceNowAgent  # , OrchestratorAgent
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 
 logger = get_logger("workflows.swarm")
@@ -58,13 +58,13 @@ class AIOpsSwarm:
             execution_timeout: Total execution timeout in seconds.
             node_timeout: Individual agent timeout in seconds.
         """
-        config = get_config()
-        rate_limits = config.settings.rate_limits
+        settings = load_settings()
+        rate_limits = settings.get("rate_limits", {})
 
-        self._max_handoffs = max_handoffs or rate_limits.max_handoffs
-        self._max_iterations = max_iterations or rate_limits.max_agent_iterations
-        self._execution_timeout = execution_timeout or rate_limits.execution_timeout_seconds
-        self._node_timeout = node_timeout or rate_limits.node_timeout_seconds
+        self._max_handoffs = max_handoffs or rate_limits.get("max_handoffs", 15)
+        self._max_iterations = max_iterations or rate_limits.get("max_agent_iterations", 20)
+        self._execution_timeout = execution_timeout or rate_limits.get("execution_timeout_seconds", 900)
+        self._node_timeout = node_timeout or rate_limits.get("node_timeout_seconds", 300)
 
         # Initialize agents
         self._datadog_agent = DataDogAgent(model_id=model_id, region=region)

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from strands import Agent
 from strands.models.bedrock import BedrockModel
 
-from ..utils.config_loader import AgentConfig, get_config
+from ..utils.config_loader import AgentConfig, get_agent_config, load_settings
 from ..utils.logging_config import get_logger
 
 
@@ -95,20 +95,13 @@ class BaseAgent(ABC):
         self._agent_id = f"{agent_type}-{uuid.uuid4().hex[:8]}"
 
         # Load configuration
-        config_loader = get_config()
-        self._settings = config_loader.settings
+        self._settings = load_settings()
 
         if custom_config:
             self._config = custom_config
         else:
-            try:
-                self._config = config_loader.get_agent_config(agent_type)
-            except ValueError:
-                # Use defaults if config not found
-                self._config = AgentConfig(
-                    name=agent_type,
-                    description=f"{agent_type} agent",
-                )
+            agent_cfg = get_agent_config(agent_type)
+            self._config = AgentConfig(**agent_cfg)
 
         # Initialize logger
         self._logger = get_logger(
@@ -123,7 +116,7 @@ class BaseAgent(ABC):
         )
 
         # Initialize Bedrock model
-        effective_region = region or self._settings.aws.region
+        effective_region = region or self._settings.get("aws", {}).get("region", "us-east-1")
         effective_model_id = model_id or self._config.model_id
 
         self._model = BedrockModel(
