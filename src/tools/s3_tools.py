@@ -1,0 +1,186 @@
+"""
+S3 Tools Module
+
+Tools for storing analysis reports and logs to Amazon S3.
+"""
+
+import os
+from datetime import UTC, datetime
+
+import boto3
+from botocore.exceptions import ClientError
+from strands import tool
+
+from ..utils.config_loader import get_config
+from ..utils.logging_config import get_logger
+
+logger = get_logger("tools.s3")
+
+
+class S3Client:
+    """
+    S3 client for storing analysis reports.
+
+    Usage:
+        client = S3Client()
+        client.upload_report("service-name", "# Report content...")
+    """
+
+    def __init__(
+        self,
+        bucket: str | None = None,
+        region: str | None = None,
+    ):
+        """
+        Initialize the S3 client.
+
+        Args:
+            bucket: S3 bucket name. Defaults to config or env var.
+            region: AWS region. Defaults to config.
+        """
+        self._config = get_config()
+        
+        self._bucket = bucket or os.environ.get(
+            "S3_REPORTS_BUCKET",
+            self._config.settings.s3.get("reports_bucket", "aiops-reports")
+        )
+        self._region = region or self._config.settings.aws.region
+        
+        self._client = boto3.client("s3", region_name=self._region)
+
+    def upload_report(
+        self,
+        service_name: str,
+        content: str,
+        timestamp: str | None = None,
+    ) -> dict:
+        """
+        Upload a service report to S3.
+
+        Args:
+            service_name: Name of the service.
+            content: Markdown content of the report.
+            timestamp: Optional timestamp. Defaults to current time.
+
+        Returns:
+            Dict with upload details or error.
+        """
+        if not timestamp:
+            timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+
+        key = f"{service_name}/{timestamp}.md"
+
+        try:
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=key,
+                Body=content.encode("utf-8"),
+                ContentType="text/markdown",
+            )
+
+            s3_uri = f"s3://{self._bucket}/{key}"
+            logger.info(f"Uploaded report: {s3_uri}")
+
+            return {
+                "success": True,
+                "bucket": self._bucket,
+                "key": key,
+                "s3_uri": s3_uri,
+            }
+
+        except ClientError as e:
+            logger.error(f"Failed to upload report: {e}")
+            return {"success": False, "error": str(e)}
+
+    def upload_summary(
+        self,
+        content: str,
+        timestamp: str | None = None,
+    ) -> dict:
+        """
+        Upload a summary report to the summaries folder.
+
+        Args:
+            content: Markdown content of the summary.
+            timestamp: Optional timestamp. Defaults to current time.
+
+        Returns:
+            Dict with upload details or error.
+        """
+        now = datetime.now(UTC)
+        if not timestamp:
+            timestamp = now.strftime("%Y-%m-%dT%H-%M-%SZ")
+        
+        date_folder = now.strftime("%Y-%m-%d")
+        key = f"summaries/{date_folder}/{timestamp}.md"
+
+        try:
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=key,
+                Body=content.encode("utf-8"),
+                ContentType="text/markdown",
+            )
+
+            s3_uri = f"s3://{self._bucket}/{key}"
+            logger.info(f"Uploaded summary: {s3_uri}")
+
+            return {
+                "success": True,
+                "bucket": self._bucket,
+                "key": key,
+                "s3_uri": s3_uri,
+            }
+
+        except ClientError as e:
+            logger.error(f"Failed to upload summary: {e}")
+            return {"success": False, "error": str(e)}
+
+
+_default_client: S3Client | None = None
+
+
+def _get_client() -> S3Client:
+    """Get or create the default S3 client."""
+    global _default_client
+    if _default_client is None:
+        _default_client = S3Client()
+    return _default_client
+
+
+@tool
+def upload_service_report(
+    service_name: str,
+    content: str,
+) -> dict:
+    """
+    Upload a service analysis report to S3.
+
+    Stores the report in the format: s3://bucket/{service_name}/{timestamp}.md
+
+    Args:
+        service_name: Name of the service being reported on.
+        content: Markdown content of the report.
+
+    Returns:
+        Dictionary with upload result including S3 URI or error details.
+    """
+    client = _get_client()
+    return client.upload_report(service_name, content)
+
+
+@tool
+def upload_summary_report(content: str) -> dict:
+    """
+    Upload a summary report to the summaries folder in S3.
+
+    Stores the report in: s3://bucket/summaries/{date}/{timestamp}.md
+
+    Args:
+        content: Markdown content of the summary report.
+
+    Returns:
+        Dictionary with upload result including S3 URI or error details.
+    """
+    client = _get_client()
+    return client.upload_summary(content)
