@@ -16,11 +16,11 @@ This system runs as an ECS container triggered by AWS EventBridge. When triggere
 ## Architecture
 
 ```
-EventBridge (scheduled trigger)
+EventBridge / Bedrock Agent Runtime API
         │
         ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  ECS Container                                                │
+│  AgentCore Runtime (managed by AWS)                           │
 │                                                               │
 │  ┌─────────────┐                                             │
 │  │  main.py    │                                             │
@@ -238,27 +238,42 @@ aiops-proactive-workflow/
 
 ## AWS Deployment
 
-### ECS Task Definition
+### AgentCore Deployment
 
-Create an ECS task with:
-- Image: Your ECR image
-- Memory: 2048 MB
-- CPU: 1024
-- Environment variables from .env
+1. Build and push Docker image to ECR:
+```bash
+docker build -t aiops-proactive .
+docker tag aiops-proactive:latest <account>.dkr.ecr.<region>.amazonaws.com/aiops-proactive:latest
+docker push <account>.dkr.ecr.<region>.amazonaws.com/aiops-proactive:latest
+```
 
-### EventBridge Rule
+2. Configure AgentCore with the image URI
 
-Create a scheduled rule to trigger the ECS task:
+3. Invoke via Bedrock Agent Runtime API:
+```python
+import boto3
 
+client = boto3.client('bedrock-agent-runtime')
+response = client.invoke_agent(
+    agentId='YOUR_AGENT_ID',
+    agentAliasId='YOUR_ALIAS_ID',
+    sessionId='session-123',
+    inputText='{"mode": "proactive"}'
+)
+```
+
+### EventBridge Rule (Scheduled)
+
+Create a rule to trigger the agent on a schedule:
 ```
 Schedule: rate(1 day) or cron(0 6 * * ? *)
-Target: ECS task
+Target: Bedrock Agent
 ```
 
 ### IAM Permissions
 
-The ECS task role needs:
-- `bedrock:InvokeModel` for Bedrock
+The AgentCore execution role needs:
+- `bedrock:InvokeModel` for Bedrock LLM calls
 - `s3:PutObject` for report uploads
 - `logs:*` for CloudWatch
 

@@ -1,9 +1,9 @@
-# AIOps Proactive Workflow Container
-# For deployment on AWS ECS (triggered by EventBridge)
+# AIOps Proactive Workflow - AgentCore Runtime
+# Deployed on AWS Bedrock AgentCore
 
-FROM python:3.12-slim
+FROM public.ecr.aws/lambda/python:3.12
 
-WORKDIR /app
+WORKDIR ${LAMBDA_TASK_ROOT}
 
 # Install dependencies
 COPY requirements.txt .
@@ -16,8 +16,9 @@ COPY config/ ./config/
 COPY src/ ./src/
 
 # Set environment variables
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=${LAMBDA_TASK_ROOT}
 ENV PYTHONUNBUFFERED=1
+ENV AIOPS_CONFIG_DIR=${LAMBDA_TASK_ROOT}/config
 
-# Run the proactive workflow
-CMD ["python", "-m", "src.main"]
+# AgentCore entry point
+CMD ["src.main.invoke"]

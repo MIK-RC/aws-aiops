@@ -1,15 +1,14 @@
 """
 Main Entry Point
 
-Entry point for the AIOps Proactive Workflow.
-Triggered by AWS EventBridge, runs analysis and exits.
+AgentCore Runtime wrapper for the AIOps Proactive Workflow.
+Manages scaling, invocations, and health checks automatically.
 """
 
 import json
 import sys
 from pathlib import Path
 
-# Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -17,51 +16,109 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from bedrock_agentcore import BedrockAgentCoreApp
+
 from src.utils.logging_config import get_logger, setup_logging
-from src.workflows import run_proactive_workflow
+from src.workflows import AIOpsSwarm, run_proactive_workflow
 
 setup_logging()
 logger = get_logger("main")
 
+# Initialize AgentCore app
+app = BedrockAgentCoreApp()
 
-def main():
-    """
-    Main entry point.
 
-    Executes the proactive workflow:
-    1. Fetches services with errors/warnings from DataDog
-    2. Processes each service in parallel
-    3. Creates ServiceNow tickets for significant issues
-    4. Uploads reports to S3
-    5. Generates summary and exits
+@app.entrypoint
+def invoke(payload: dict) -> dict:
     """
-    logger.info("Starting AIOps Proactive Workflow")
+    Main entry point for AgentCore invocations.
+
+    Supports two modes:
+    - "proactive": Run the full proactive workflow (default)
+    - "swarm": Run a single task through the Swarm
+
+    Payload:
+        {
+            "mode": "proactive" | "swarm",
+            "task": "Optional task for swarm mode",
+            "options": {
+                "time_from": "now-1d",
+                "time_to": "now"
+            }
+        }
+
+    Returns:
+        Workflow result dictionary.
+    """
+    logger.info(f"AgentCore invoked: {json.dumps(payload)[:200]}...")
+
+    mode = payload.get("mode", "proactive")
 
     try:
-        result = run_proactive_workflow()
-
-        # Log summary
-        services_total = result.get("services", {}).get("total", 0)
-        tickets_count = len(result.get("tickets_created", []))
-        execution_time = result.get("execution_time_seconds", 0)
-
-        logger.info(
-            "Workflow completed: "
-            f"{services_total} services processed, "
-            f"{tickets_count} tickets created, "
-            f"{execution_time:.2f}s"
-        )
-
-        # Print result for container logs
-        print(json.dumps(result, indent=2))
-
-        return 0 if result.get("success") else 1
+        if mode == "proactive":
+            return handle_proactive(payload)
+        elif mode == "swarm":
+            return handle_swarm(payload)
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown mode: {mode}",
+                "supported_modes": ["proactive", "swarm"],
+            }
 
     except Exception as e:
-        logger.error(f"Workflow failed: {e}")
-        print(json.dumps({"success": False, "error": str(e)}, indent=2))
-        return 1
+        logger.error(f"Invocation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "mode": mode,
+        }
 
 
+def handle_proactive(payload: dict) -> dict:
+    """Handle proactive workflow mode."""
+    logger.info("Running proactive workflow")
+
+    result = run_proactive_workflow()
+
+    services_total = result.get("services", {}).get("total", 0)
+    tickets_count = len(result.get("tickets_created", []))
+    execution_time = result.get("execution_time_seconds", 0)
+
+    logger.info(
+        "Workflow completed: "
+        f"{services_total} services processed, "
+        f"{tickets_count} tickets created, "
+        f"{execution_time:.2f}s"
+    )
+
+    return result
+
+
+def handle_swarm(payload: dict) -> dict:
+    """Handle swarm task mode."""
+    task = payload.get("task", "")
+
+    if not task:
+        return {"success": False, "error": "Missing 'task' in payload"}
+
+    logger.info(f"Running swarm task: {task[:100]}...")
+
+    swarm = AIOpsSwarm()
+    result = swarm.run(task)
+
+    return result.to_dict()
+
+
+@app.health_check
+def health() -> dict:
+    """Health check endpoint for AgentCore."""
+    return {"status": "healthy", "service": "aiops-proactive-workflow"}
+
+
+# Support direct execution for local testing
 if __name__ == "__main__":
-    sys.exit(main())
+    # When run directly, execute proactive workflow
+    result = invoke({"mode": "proactive"})
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result.get("success") else 1)
