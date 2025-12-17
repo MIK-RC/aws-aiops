@@ -43,11 +43,8 @@ AWS_REGION="${AWS_REGION:-us-east-1}"
 # Create a role with: Bedrock, S3, CloudWatch Logs permissions
 EXECUTION_ROLE_ARN="${EXECUTION_ROLE_ARN:-arn:aws:iam::ACCOUNT_ID:role/AgentCoreExecutionRole}"
 
-# Deployment type: container or direct_code_deploy
-DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:-container}"
-
-# S3 bucket for code (only needed for direct_code_deploy)
-AGENTCORE_S3_BUCKET="${AGENTCORE_S3_BUCKET:-}"
+# Deployment type: container
+DEPLOYMENT_TYPE="container"
 
 # ============================================
 # Colors for output
@@ -149,18 +146,12 @@ check_prerequisites() {
 do_configure() {
     log_info "Configuring AgentCore agent: $AGENT_NAME"
     
-    local s3_flag=""
-    if [ -n "$AGENTCORE_S3_BUCKET" ] && [ "$DEPLOYMENT_TYPE" = "direct_code_deploy" ]; then
-        s3_flag="-s3 $AGENTCORE_S3_BUCKET"
-    fi
-    
     $AGENTCORE_CMD configure -c \
         -n "$AGENT_NAME" \
         -e "src/main.py" \
         -dt "$DEPLOYMENT_TYPE" \
         -r "$AWS_REGION" \
         -er "$EXECUTION_ROLE_ARN" \
-        $s3_flag \
         -ni
     
     log_success "Agent configured"
