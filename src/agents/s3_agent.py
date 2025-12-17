@@ -2,9 +2,14 @@
 S3 Agent Module
 
 Specialist agent for storing analysis reports to Amazon S3.
+Can be used standalone or as part of the multi-agent system.
 """
 
-from ..tools.s3_tools import S3Client, upload_service_report, upload_summary_report
+from ..tools.s3_tools import (
+    S3Client,
+    upload_service_report,
+    upload_summary_report,
+)
 from .base import BaseAgent
 
 
@@ -17,9 +22,19 @@ class S3Agent(BaseAgent):
     - Upload summary reports to S3
     - Manage report organization by service and date
 
-    Usage:
+    Standalone Usage:
         agent = S3Agent()
+
+        # Simple invocation with LLM reasoning
+        result = agent.invoke("Upload a report for payment-service...")
+
+        # Direct tool access
         result = agent.upload_report("payment-service", "# Report content...")
+
+    Swarm Usage:
+        # The agent's inner_agent can be used in a Swarm
+        from strands.multiagent import Swarm
+        swarm = Swarm(agents=[s3_agent.inner_agent, ...])
     """
 
     def __init__(
@@ -34,9 +49,13 @@ class S3Agent(BaseAgent):
         Args:
             model_id: Optional Bedrock model ID override.
             region: Optional AWS region override.
-            bucket: Optional S3 bucket name override.
+            bucket: Optional S3 bucket name (defaults to S3_REPORTS_BUCKET env var).
         """
-        self._s3_client = S3Client(bucket=bucket, region=region)
+        # Initialize the S3 client for direct tool access
+        self._s3_client = S3Client(
+            bucket=bucket,
+            region=region,
+        )
 
         super().__init__(
             agent_type="s3",
@@ -51,6 +70,10 @@ class S3Agent(BaseAgent):
             upload_summary_report,
         ]
 
+    # ==========================================
+    # Direct Tool Access Methods (Standalone Use)
+    # ==========================================
+
     def upload_report(
         self,
         service_name: str,
@@ -58,7 +81,10 @@ class S3Agent(BaseAgent):
         timestamp: str | None = None,
     ) -> dict:
         """
-        Upload a service report to S3.
+        Upload a service report to S3 directly.
+
+        Use this for programmatic access when you don't need
+        LLM reasoning, just direct upload.
 
         Args:
             service_name: Name of the service.
@@ -75,7 +101,7 @@ class S3Agent(BaseAgent):
         self.record_action(
             action_type="upload_report",
             description=f"Uploaded report for {service_name}",
-            input_summary=f"Service: {service_name}, Content length: {len(content)}",
+            input_summary=f"Service: {service_name}, Content: {len(content)} chars",
             output_summary=result.get("s3_uri", result.get("error", "Unknown")),
             success=result.get("success", False),
             error_message=result.get("error", ""),
@@ -89,7 +115,10 @@ class S3Agent(BaseAgent):
         timestamp: str | None = None,
     ) -> dict:
         """
-        Upload a summary report to S3.
+        Upload a summary report to S3 directly.
+
+        Use this for programmatic access when you don't need
+        LLM reasoning, just direct upload.
 
         Args:
             content: Markdown content of the summary.
@@ -105,7 +134,7 @@ class S3Agent(BaseAgent):
         self.record_action(
             action_type="upload_summary",
             description="Uploaded summary report",
-            input_summary=f"Content length: {len(content)}",
+            input_summary=f"Content: {len(content)} chars",
             output_summary=result.get("s3_uri", result.get("error", "Unknown")),
             success=result.get("success", False),
             error_message=result.get("error", ""),

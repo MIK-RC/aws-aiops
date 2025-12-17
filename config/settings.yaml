@@ -20,13 +20,15 @@ logging:
   # Enable JSON logging for production
   json_format: false
 
-# Cron job settings
-cron:
+# Workflow settings
+workflow:
   # Time range for log queries (supports DataDog time syntax)
   default_time_from: "now-1d"
   default_time_to: "now"
-  # Schedule expression (daily at 6 AM UTC)
-  schedule: "cron(0 6 * * ? *)"
+  # Maximum parallel workers for service processing
+  max_workers: 50
+  # Use lightweight processor (Option A) instead of full orchestrator (Option B)
+  use_lightweight_processor: false
 
 # Rate limiting and safety
 rate_limits:

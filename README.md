@@ -1,430 +1,281 @@
-# AIOps Multi-Agent System
+# AIOps Proactive Workflow
 
-A production-ready multi-agent system for intelligent operations management using AWS Strands Agents SDK and Amazon Bedrock AgentCore.
+A multi-agent system for proactive operations management. Automatically analyzes services with issues, creates incident tickets, and stores reports to S3.
 
 ## Overview
 
-This system transforms traditional AIOps workflows into an intelligent multi-agent architecture where specialized agents collaborate to:
+This system runs as an ECS container triggered by AWS EventBridge. When triggered, it:
 
-- **Fetch and analyze logs** from DataDog
-- **Identify error patterns** and suggest code fixes
-- **Create incident tickets** in ServiceNow
-- **Generate comprehensive reports** for operations teams
-
-## Features
-
-- 🤖 **Multi-Agent Architecture**: Four specialized agents (Orchestrator, DataDog, Coding, ServiceNow) working together
-- 🔄 **Swarm Coordination**: Autonomous agent collaboration using the Strands SDK Swarm pattern
-- 💾 **Session Persistence**: S3-based memory for conversation continuity
-- 📊 **Daily Cron Workflows**: Automated daily analysis with EventBridge scheduling
-- 🚀 **Production Ready**: AgentCore deployment for serverless, scalable execution
-- 🧪 **Modular Design**: Each agent can be used standalone or as part of the swarm
+1. Fetches services with errors/warnings from DataDog
+2. Processes each service in parallel
+3. Analyzes errors and suggests fixes
+4. Creates ServiceNow tickets for significant issues
+5. Uploads individual reports to S3
+6. Generates a summary report
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    User / EventBridge                        │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Orchestrator Agent                         │
-│  • Coordinates specialist agents                             │
-│  • Maintains conversation memory                             │
-│  • Generates final reports                                   │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│  DataDog Agent  │ │  Coding Agent   │ │ ServiceNow Agent│
-│                 │ │                 │ │                 │
-│ • Query logs    │ │ • Analyze errors│ │ • Create tickets│
-│ • Extract       │ │ • Suggest fixes │ │ • Update status │
-│   services      │ │ • Assess        │ │ • Track         │
-│ • Format data   │ │   severity      │ │   incidents     │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
+EventBridge (scheduled trigger)
+        │
+        ▼
+┌──────────────────────────────────────────────────────────────┐
+│  ECS Container                                                │
+│                                                               │
+│  ┌─────────────┐                                             │
+│  │  main.py    │                                             │
+│  └──────┬──────┘                                             │
+│         │                                                     │
+│         ▼                                                     │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  ProactiveWorkflow                                       │ │
+│  │                                                          │ │
+│  │  1. DataDog Agent → Fetch services with issues           │ │
+│  │                                                          │ │
+│  │  2. ThreadPoolExecutor (50 workers)                      │ │
+│  │     ┌────────────────────────────────────────────────┐   │ │
+│  │     │  Per Service:                                  │   │ │
+│  │     │  • Coding Agent → Analyze errors               │   │ │
+│  │     │  • ServiceNow Agent → Create ticket            │   │ │
+│  │     │  • S3 Agent → Upload report                    │   │ │
+│  │     └────────────────────────────────────────────────┘   │ │
+│  │                                                          │ │
+│  │  3. S3 Agent → Upload summary                            │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│                                                               │
+└──────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────┐
+│  S3 Bucket       │
+│  ├── {service}/  │
+│  │   └── {ts}.md │
+│  └── summaries/  │
+│      └── {date}/ │
+│          └── .md │
+└──────────────────┘
 ```
+
+## Agents
+
+| Agent | Responsibility |
+|-------|----------------|
+| DataDog Agent | Fetch error/warning logs, identify affected services |
+| Coding Agent | Analyze errors, identify root causes, suggest fixes |
+| ServiceNow Agent | Create incident tickets for medium+ severity issues |
+| S3 Agent | Upload service reports and summary to S3 |
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.12+
-- AWS account with Bedrock access (Claude models enabled)
+- AWS account with Bedrock access
 - DataDog API credentials
 - ServiceNow instance credentials
+- S3 bucket for reports
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Clone and setup
 git clone <repository-url>
-cd aiops-multi-agent
-
-# Create virtual environment
+cd aiops-proactive-workflow
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
 
-# For development
-pip install -r requirements-dev.txt
-
-# Set up your environment
+# Configure environment
 cp .env.example .env
 # Edit .env with your credentials
 ```
 
 ### Configuration
 
-1. **Create your `.env` file from the template:**
-
-```bash
-cp .env.example .env
-```
-
-2. **Edit `.env` with your credentials:**
+Edit `.env`:
 
 ```env
-# AWS Credentials
-AWS_ACCESS_KEY_ID=your-access-key-id
-AWS_SECRET_ACCESS_KEY=your-secret-access-key
+# AWS
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
 AWS_DEFAULT_REGION=us-east-1
 
-# DataDog Credentials
-DATADOG_API_KEY=your-datadog-api-key
-DATADOG_APP_KEY=your-datadog-app-key
+# DataDog
+DATADOG_API_KEY=your-api-key
+DATADOG_APP_KEY=your-app-key
 DATADOG_SITE=us5
 
-# ServiceNow Credentials
+# ServiceNow
 SERVICENOW_INSTANCE=your-instance.service-now.com
 SERVICENOW_USER=your-username
 SERVICENOW_PASS=your-password
+
+# S3 Reports
+S3_REPORTS_BUCKET=your-reports-bucket
 ```
 
-3. **Customize agent configuration** in `config/` directory (optional):
-   - `settings.yaml`: Global settings, session storage, rate limits
-   - `agents.yaml`: Agent prompts, model IDs, behavior
-   - `tools.yaml`: Tool-specific settings (API endpoints, limits)
-
-> **Note:** The `.env` file is automatically loaded by the application. Never commit your `.env` file to version control!
-
-## Usage
-
-### API Server (Recommended)
-
-The primary way to interact with the system is through the FastAPI server:
+### Run Locally
 
 ```bash
-# Start the API server
-python src/api/app.py
-
-# Or with uvicorn (more control)
-uvicorn src.api.app:app --reload --port 8000
+python -m src.main
 ```
 
-**API Endpoint:**
+### Run with Docker
 
 ```bash
-# Send a message to the orchestrator
-curl -X POST http://localhost:8000/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Analyze errors in the payment service"}'
-
-# Response:
-# {
-#   "response": "I analyzed the payment service logs...",
-#   "session_id": "sess-a1b2c3d4"
-# }
-
-# Continue the conversation using the session_id
-curl -X POST http://localhost:8000/invoke \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Create a ticket for the critical issues", "session_id": "sess-a1b2c3d4"}'
+docker build -t aiops-proactive .
+docker run --env-file .env aiops-proactive
 ```
 
-**API Docs:** `http://localhost:8000/docs`
+## S3 Report Structure
 
-### Command Line Interface
-
-```bash
-# Interactive chat with orchestrator
-python -m src.main chat "Analyze errors in the payment service"
-
-# Run daily analysis workflow
-python -m src.main analyze --time-from now-1d --create-tickets
-
-# Run multi-agent swarm
-python -m src.main swarm "Investigate database connection issues"
-
-# Test individual agents
-python -m src.main test-agent datadog
-python -m src.main test-agent coding
-python -m src.main test-agent servicenow
+```
+s3://your-reports-bucket/
+├── payment-service/
+│   ├── 2024-12-16T10-30-00Z.md
+│   └── 2024-12-17T10-30-00Z.md
+├── auth-service/
+│   └── 2024-12-16T10-30-00Z.md
+└── summaries/
+    └── 2024-12-16/
+        └── 2024-12-16T10-35-00Z.md
 ```
 
-### Programmatic Usage
+## Report Format
 
-#### Using Individual Agents (Standalone)
+Each service report follows this format:
 
-```python
-from src.agents import DataDogAgent, CodingAgent, ServiceNowAgent
+```markdown
+# Error Report: payment-service
 
-# DataDog Agent - standalone
-datadog = DataDogAgent()
-logs = datadog.fetch_logs(time_from="now-1h")
-services = datadog.get_services(logs)
+Generated: 2024-12-16 10:30:00 UTC
 
-# Coding Agent - standalone
-coding = CodingAgent()
-analysis = coding.full_analysis(formatted_logs, "payment-service")
-print(analysis["summary"])
+## Summary
+- Severity: HIGH
+- Error types: 3
+- Recurring issues: 2
+- ServiceNow ticket: INC0012345
 
-# ServiceNow Agent - standalone
-servicenow = ServiceNowAgent()
-ticket = servicenow.create_ticket(
-    title="Database connection timeout",
-    description="Full details...",
-    priority="high"
-)
+## Errors Detected
+- ConnectionRefused
+- Timeout
+- DatabaseError
+
+## Root Cause Analysis
+- Network connectivity issues or service unavailability
+- Database connection pool exhaustion or query issues
+
+## Suggested Fixes
+### 1. ConnectionRefused
+**Issue:** Service connection failure
+**Fix:** Implement retry logic with exponential backoff
+**Prevention:** Use connection pools and health checks
+
+## Related Logs
+```
+[2024-12-16T10:25:00] [ERROR] [payment-service] Connection refused...
+```
 ```
 
-#### Using the Orchestrator
+## Configuration
 
-```python
-from src.agents import OrchestratorAgent
+### Workflow Settings (config/settings.yaml)
 
-# With session persistence
-orchestrator = OrchestratorAgent(
-    session_id="user-123",
-    use_s3_storage=True,
-    s3_bucket="my-sessions-bucket"
-)
-
-# Interactive conversation
-response = orchestrator.invoke("What services had errors today?")
-
-# Full analysis workflow
-report = orchestrator.analyze_and_report(
-    user_request="Analyze payment service issues",
-    time_from="now-1d",
-    create_tickets=True
-)
+```yaml
+workflow:
+  default_time_from: "now-1d"
+  default_time_to: "now"
+  max_workers: 50
+  use_lightweight_processor: false  # true = Option A, false = Option B
 ```
 
-#### Using the Swarm
+### Processing Modes
 
-```python
-from src.workflows import AIOpsSwarm
-
-swarm = AIOpsSwarm()
-result = swarm.run("Analyze yesterday's errors and create tickets for critical issues")
-
-print(f"Success: {result.success}")
-print(f"Agents used: {result.agents_used}")
-print(f"Summary: {result.summary}")
-```
-
-#### Running Daily Analysis
-
-```python
-from src.workflows import run_daily_analysis
-
-result = run_daily_analysis(
-    time_from="now-1d",
-    time_to="now",
-    create_tickets=True,
-    dry_run=False
-)
-
-print(result["summary"])
-```
-
-## Deployment
-
-### AgentCore Deployment (Recommended)
-
-Deploy to Amazon Bedrock AgentCore for production:
-
-```bash
-# Build and push Docker image
-./scripts/deploy.sh agentcore --region us-east-1
-
-# The script will:
-# 1. Create ECR repository
-# 2. Build Docker image
-# 3. Push to ECR
-# 4. Output next steps for AgentCore configuration
-```
-
-### Lambda Deployment (for Cron Jobs)
-
-```bash
-# Deploy Lambda for scheduled execution
-./scripts/deploy.sh lambda --region us-east-1
-
-# Configure EventBridge rule for daily execution
-aws events put-rule \
-  --name aiops-daily-analysis \
-  --schedule-expression "cron(0 6 * * ? *)" \
-  --state ENABLED
-```
+| Mode | Setting | Description |
+|------|---------|-------------|
+| Option A | `use_lightweight_processor: true` | Direct agent calls, faster, less overhead |
+| Option B | `use_lightweight_processor: false` | Full orchestrator per service, more reasoning |
 
 ## Project Structure
 
 ```
-aiops-multi-agent/
-├── config/                     # YAML configuration files
-│   ├── settings.yaml           # Global settings
-│   ├── agents.yaml             # Agent configurations & prompts
-│   └── tools.yaml              # Tool configurations
-│
-├── src/                        # Source code
-│   ├── api/                    # FastAPI application
-│   │   └── app.py              # API server
-│   │
-│   ├── agents/                 # Agent implementations
-│   │   ├── base.py             # BaseAgent class
-│   │   ├── orchestrator.py     # OrchestratorAgent
-│   │   ├── datadog_agent.py    # DataDogAgent
-│   │   ├── coding_agent.py     # CodingAgent
-│   │   └── servicenow_agent.py # ServiceNowAgent
-│   │
-│   ├── tools/                  # Tool implementations (standalone)
-│   │   ├── datadog_tools.py    # DataDog API tools
-│   │   ├── servicenow_tools.py # ServiceNow API tools
-│   │   └── code_analysis_tools.py # Code analysis tools
-│   │
-│   ├── memory/                 # Session management
-│   │   ├── session_manager.py  # Session factory
-│   │   └── conversation_history.py
-│   │
-│   ├── workflows/              # Workflow orchestration
-│   │   ├── swarm_coordinator.py # Multi-agent swarm
-│   │   └── cron_workflow.py    # Daily analysis workflow
-│   │
-│   └── utils/                  # Utilities
-│       ├── config_loader.py    # YAML config loading
-│       └── logging_config.py   # Logging setup
-│
-├── deployment/                 # Deployment files
-│   ├── agentcore/              # AgentCore deployment
-│   └── lambda/                 # Lambda deployment
-│
-├── tests/                      # Test suite
-│   ├── unit/                   # Unit tests
-│   └── integration/            # Integration tests
-│
-└── scripts/                    # Utility scripts
-    ├── deploy.sh               # Deployment script
-    └── local_run.py            # Local testing
+aiops-proactive-workflow/
+├── config/
+│   ├── settings.yaml      # Workflow and global settings
+│   ├── agents.yaml        # Agent configurations
+│   └── tools.yaml         # Tool configurations
+├── src/
+│   ├── agents/
+│   │   ├── base.py        # BaseAgent class
+│   │   ├── datadog_agent.py
+│   │   ├── coding_agent.py
+│   │   ├── servicenow_agent.py
+│   │   ├── s3_agent.py
+│   │   └── orchestrator.py
+│   ├── tools/
+│   │   ├── datadog_tools.py
+│   │   ├── code_analysis_tools.py
+│   │   ├── servicenow_tools.py
+│   │   └── s3_tools.py
+│   ├── workflows/
+│   │   └── proactive_workflow.py
+│   ├── utils/
+│   │   ├── config_loader.py
+│   │   └── logging_config.py
+│   └── main.py            # Entry point
+├── tests/
+├── Dockerfile
+├── requirements.txt
+└── .env.example
 ```
+
+## AWS Deployment
+
+### ECS Task Definition
+
+Create an ECS task with:
+- Image: Your ECR image
+- Memory: 2048 MB
+- CPU: 1024
+- Environment variables from .env
+
+### EventBridge Rule
+
+Create a scheduled rule to trigger the ECS task:
+
+```
+Schedule: rate(1 day) or cron(0 6 * * ? *)
+Target: ECS task
+```
+
+### IAM Permissions
+
+The ECS task role needs:
+- `bedrock:InvokeModel` for Bedrock
+- `s3:PutObject` for report uploads
+- `logs:*` for CloudWatch
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| AWS_ACCESS_KEY_ID | Yes | AWS credentials |
+| AWS_SECRET_ACCESS_KEY | Yes | AWS credentials |
+| AWS_DEFAULT_REGION | No | Default: us-east-1 |
+| DATADOG_API_KEY | Yes | DataDog API key |
+| DATADOG_APP_KEY | Yes | DataDog App key |
+| DATADOG_SITE | No | Default: us5 |
+| SERVICENOW_INSTANCE | Yes | ServiceNow URL |
+| SERVICENOW_USER | Yes | ServiceNow username |
+| SERVICENOW_PASS | Yes | ServiceNow password |
+| S3_REPORTS_BUCKET | Yes | S3 bucket for reports |
 
 ## Testing
 
 ```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src --cov-report=html
-
-# Run specific test file
-pytest tests/unit/test_agents.py -v
-
-# Run integration tests
-pytest tests/integration/ -v
+pytest tests/ -v
 ```
-
-## Configuration Reference
-
-### settings.yaml
-
-```yaml
-aws:
-  region: "us-east-1"
-
-session:
-  bucket: "aiops-agent-sessions"
-  prefix: "sessions/"
-  ttl: 604800  # 7 days
-
-cron:
-  default_time_from: "now-1d"
-  default_time_to: "now"
-  schedule: "cron(0 6 * * ? *)"
-
-rate_limits:
-  max_agent_iterations: 20
-  max_handoffs: 15
-  execution_timeout_seconds: 900
-```
-
-### agents.yaml
-
-```yaml
-orchestrator:
-  name: "orchestrator_agent"
-  model_id: "us.anthropic.claude-sonnet-4-20250514-v1:0"
-  max_tokens: 4096
-  system_prompt: |
-    You are the AIOps Orchestrator Agent...
-
-datadog:
-  name: "datadog_agent"
-  model_id: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
-  # ...
-```
-
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| strands-agents | 1.19.0 | Core agent framework |
-| boto3 | >=1.35.0 | AWS SDK |
-| bedrock-agentcore | >=0.1.0 | AgentCore runtime |
-| fastapi | >=0.115.0 | API framework |
-| uvicorn | >=0.32.0 | ASGI server |
-| pydantic | >=2.4.0 | Data validation |
-| PyYAML | >=6.0.1 | Configuration |
-| requests | >=2.31.0 | HTTP client |
-
-## Environment Variables
-
-All environment variables can be set in a `.env` file (copy from `.env.example`).
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `AWS_ACCESS_KEY_ID` | Yes | AWS access key ID |
-| `AWS_SECRET_ACCESS_KEY` | Yes | AWS secret access key |
-| `AWS_DEFAULT_REGION` | No | AWS region (default: us-east-1) |
-| `DATADOG_API_KEY` | Yes | DataDog API key |
-| `DATADOG_APP_KEY` | Yes | DataDog Application key |
-| `DATADOG_SITE` | No | DataDog site (default: us5) |
-| `SERVICENOW_INSTANCE` | Yes | ServiceNow instance URL |
-| `SERVICENOW_USER` | Yes | ServiceNow username |
-| `SERVICENOW_PASS` | Yes | ServiceNow password |
-| `AIOPS_CONFIG_DIR` | No | Config directory path |
-| `AIOPS_SESSION_BACKEND` | No | Session backend (s3/file) |
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests: `pytest`
-5. Submit a pull request
 
 ## License
 
-MIT License - See LICENSE file for details.
-
-## Support
-
-For issues and questions:
-- Open a GitHub issue
-- Check the documentation in `docs/`
-- Review the configuration examples in `config/`
+MIT License

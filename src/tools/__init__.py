@@ -16,6 +16,11 @@ from .datadog_tools import (
     format_logs_for_analysis,
     query_logs,
 )
+from .s3_tools import (
+    S3Client,
+    upload_service_report,
+    upload_summary_report,
+)
 from .servicenow_tools import (
     ServiceNowClient,
     create_incident,
@@ -34,6 +39,10 @@ __all__ = [
     "update_incident",
     "get_incident_status",
     "ServiceNowClient",
+    # S3 tools
+    "upload_service_report",
+    "upload_summary_report",
+    "S3Client",
     # Code analysis tools
     "analyze_error_patterns",
     "suggest_code_fix",

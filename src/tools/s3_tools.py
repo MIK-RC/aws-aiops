@@ -2,6 +2,7 @@
 S3 Tools Module
 
 Tools for storing analysis reports and logs to Amazon S3.
+These tools can be used standalone or as part of the S3 Agent.
 """
 
 import os
@@ -21,9 +22,15 @@ class S3Client:
     """
     S3 client for storing analysis reports.
 
+    Can be used standalone or through the tool functions.
+
     Usage:
+        # Standalone usage
         client = S3Client()
-        client.upload_report("service-name", "# Report content...")
+        result = client.upload_report("service-name", "# Report content...")
+
+        # With custom bucket
+        client = S3Client(bucket="my-custom-bucket")
     """
 
     def __init__(
@@ -35,17 +42,17 @@ class S3Client:
         Initialize the S3 client.
 
         Args:
-            bucket: S3 bucket name. Defaults to config or env var.
+            bucket: S3 bucket name. Defaults to S3_REPORTS_BUCKET env var.
             region: AWS region. Defaults to config.
         """
         self._config = get_config()
-        
-        self._bucket = bucket or os.environ.get(
-            "S3_REPORTS_BUCKET",
-            self._config.settings.s3.get("reports_bucket", "aiops-reports")
-        )
+
+        self._bucket = bucket or os.environ.get("S3_REPORTS_BUCKET")
         self._region = region or self._config.settings.aws.region
-        
+
+        if not self._bucket:
+            logger.warning("S3 reports bucket not configured")
+
         self._client = boto3.client("s3", region_name=self._region)
 
     def upload_report(
@@ -65,6 +72,10 @@ class S3Client:
         Returns:
             Dict with upload details or error.
         """
+        if not self._bucket:
+            logger.error("S3 reports bucket not configured")
+            return {"success": False, "error": "S3 reports bucket not configured"}
+
         if not timestamp:
             timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
 
@@ -107,10 +118,14 @@ class S3Client:
         Returns:
             Dict with upload details or error.
         """
+        if not self._bucket:
+            logger.error("S3 reports bucket not configured")
+            return {"success": False, "error": "S3 reports bucket not configured"}
+
         now = datetime.now(UTC)
         if not timestamp:
             timestamp = now.strftime("%Y-%m-%dT%H-%M-%SZ")
-        
+
         date_folder = now.strftime("%Y-%m-%d")
         key = f"summaries/{date_folder}/{timestamp}.md"
 
@@ -137,6 +152,7 @@ class S3Client:
             return {"success": False, "error": str(e)}
 
 
+# Create a default client instance for tool functions
 _default_client: S3Client | None = None
 
 
@@ -164,6 +180,12 @@ def upload_service_report(
 
     Returns:
         Dictionary with upload result including S3 URI or error details.
+
+    Example:
+        result = upload_service_report(
+            service_name="payment-service",
+            content="# Error Report\\n\\n..."
+        )
     """
     client = _get_client()
     return client.upload_report(service_name, content)
@@ -181,6 +203,9 @@ def upload_summary_report(content: str) -> dict:
 
     Returns:
         Dictionary with upload result including S3 URI or error details.
+
+    Example:
+        result = upload_summary_report("# Daily Summary\\n\\n...")
     """
     client = _get_client()
     return client.upload_summary(content)
