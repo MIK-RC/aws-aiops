@@ -58,7 +58,9 @@ class AIOpsSwarm:
         self._node_timeout = rate_limits.get("node_timeout_seconds", 300)
 
         # Initialize agents
-        self._datadog_agent = DataDogAgent(model_id=model_id, region=region) if include_datadog else None
+        self._datadog_agent = (
+            DataDogAgent(model_id=model_id, region=region) if include_datadog else None
+        )
         self._coding_agent = CodingAgent(model_id=model_id, region=region)
         self._servicenow_agent = ServiceNowAgent(model_id=model_id, region=region)
         self._s3_agent = S3Agent(model_id=model_id, region=region) if include_s3 else None

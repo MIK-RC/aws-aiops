@@ -138,10 +138,12 @@ class ProactiveWorkflow:
         for service in services:
             formatted = self._datadog_agent.format_logs(logs, service=service)
 
-            service_data.append({
-                "service_name": service,
-                "formatted_logs": formatted,
-            })
+            service_data.append(
+                {
+                    "service_name": service,
+                    "formatted_logs": formatted,
+                }
+            )
 
         return service_data
 
@@ -273,12 +275,14 @@ Service name: {service_name}
     def _extract_ticket_number(self, output: str) -> str | None:
         """Extract ticket number from Swarm output."""
         import re
+
         match = re.search(r"INC\d+", output)
         return match.group(0) if match else None
 
     def _extract_s3_uri(self, output: str) -> str | None:
         """Extract S3 URI from Swarm output."""
         import re
+
         match = re.search(r"s3://[^\s]+", output)
         return match.group(0) if match else None
 
@@ -381,14 +385,9 @@ Service name: {service_name}
                 if r.ticket_number
             ],
             "reports_uploaded": [
-                {"service": r.service_name, "s3_uri": r.s3_uri}
-                for r in successful
-                if r.s3_uri
+                {"service": r.service_name, "s3_uri": r.s3_uri} for r in successful if r.s3_uri
             ],
-            "errors": [
-                {"service": r.service_name, "error": r.error}
-                for r in failed
-            ],
+            "errors": [{"service": r.service_name, "error": r.error} for r in failed],
         }
 
     def _get_execution_time(self) -> float:

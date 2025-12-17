@@ -46,7 +46,7 @@ def main():
         execution_time = result.get("execution_time_seconds", 0)
 
         logger.info(
-            f"Workflow completed: "
+            "Workflow completed: "
             f"{services_total} services processed, "
             f"{tickets_count} tickets created, "
             f"{execution_time:.2f}s"
