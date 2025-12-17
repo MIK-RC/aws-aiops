@@ -4,11 +4,11 @@ A multi-agent system for proactive operations management. Automatically analyzes
 
 ## Overview
 
-This system runs as an ECS container triggered by AWS EventBridge. When triggered, it:
+This system runs on AWS Bedrock AgentCore, triggered by EventBridge. When triggered, it:
 
 1. Fetches services with errors/warnings from DataDog
-2. Processes each service in parallel
-3. Analyzes errors and suggests fixes
+2. Processes each service in parallel (up to 50 workers)
+3. Analyzes errors and suggests fixes using AI
 4. Creates ServiceNow tickets for significant issues
 5. Uploads individual reports to S3
 6. Generates a summary report
@@ -59,11 +59,6 @@ Bedrock Agent Runtime API
 │          └── .md │
 └──────────────────┘
 ```
-
-The workflow uses **Swarm** for agent coordination within each service, enabling:
-- LLM-driven agent handoffs
-- Easy addition of new agents (e.g., Remediation Agent)
-- Autonomous decision-making per service
 
 ## Agents
 
@@ -123,17 +118,225 @@ SERVICENOW_PASS=your-password
 S3_REPORTS_BUCKET=your-reports-bucket
 ```
 
-### Run Locally
+## Local Development
+
+### Option 1: Run Workflow Directly
 
 ```bash
-python -m src.main
+# Run the proactive workflow
+./scripts/run_local.sh direct
+
+# Or without the script
+python -m src.main --mode proactive
 ```
 
-### Run with Docker
+### Option 2: Start Local Server
 
 ```bash
-docker build -t aiops-proactive .
-docker run --env-file .env aiops-proactive
+# Start AgentCore server on port 8080
+./scripts/run_local.sh server
+
+# Then invoke it
+./scripts/run_local.sh invoke
+```
+
+### Option 3: Docker Container
+
+```bash
+# Build and run in Docker
+./scripts/run_local.sh docker
+
+# In another terminal, invoke
+curl -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -d '{"mode": "proactive"}'
+```
+
+### Option 4: AgentCore Dev Server (Hot Reload)
+
+```bash
+# Requires bedrock-agentcore-starter-toolkit
+pip install bedrock-agentcore-starter-toolkit
+
+./scripts/run_local.sh dev
+```
+
+### Local Script Reference
+
+```bash
+./scripts/run_local.sh [mode]
+
+Modes:
+  direct          Run workflow directly (default)
+  server [port]   Start AgentCore server
+  dev             Start with hot reload
+  docker          Run in Docker container
+  invoke [port]   Invoke running server
+  health [port]   Check server health
+```
+
+## AWS Deployment
+
+### Prerequisites
+
+1. **AWS CLI** configured with appropriate permissions
+2. **bedrock-agentcore-starter-toolkit** installed:
+   ```bash
+   pip install bedrock-agentcore-starter-toolkit
+   ```
+3. **IAM Execution Role** for AgentCore with permissions:
+   - `bedrock:InvokeModel`
+   - `s3:PutObject`, `s3:GetObject`
+   - `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents`
+
+### Step 1: Configure Environment
+
+Update `.env` with your credentials, then add deployment config:
+
+```bash
+export EXECUTION_ROLE_ARN="arn:aws:iam::YOUR_ACCOUNT:role/AgentCoreExecutionRole"
+export AWS_REGION="us-east-1"
+export AGENT_NAME="aiops-proactive-workflow"
+```
+
+### Step 2: Deploy
+
+```bash
+# Configure and deploy in one command
+./scripts/deploy.sh
+
+# Or step by step
+./scripts/deploy.sh configure
+./scripts/deploy.sh deploy
+```
+
+### Step 3: Verify
+
+```bash
+# Check status
+./scripts/deploy.sh status
+
+# Test invocation
+./scripts/deploy.sh invoke
+```
+
+### Step 4: Configure EventBridge
+
+Create an EventBridge rule to trigger the workflow on schedule:
+
+```bash
+# Get the Runtime ARN from status output
+./scripts/deploy.sh status
+
+# Create EventBridge rule (daily at 6 AM UTC)
+aws events put-rule \
+  --name "aiops-daily-proactive" \
+  --schedule-expression "cron(0 6 * * ? *)" \
+  --state ENABLED
+
+# Create IAM role for EventBridge to invoke AgentCore
+# (See IAM section below)
+
+# Add target
+aws events put-targets \
+  --rule "aiops-daily-proactive" \
+  --targets '[{
+    "Id": "aiops-runtime",
+    "Arn": "arn:aws:bedrock-agentcore:REGION:ACCOUNT:runtime/RUNTIME_ID",
+    "RoleArn": "arn:aws:iam::ACCOUNT:role/EventBridgeAgentCoreRole",
+    "Input": "{\"mode\": \"proactive\"}"
+  }]'
+```
+
+### Deployment Script Reference
+
+```bash
+./scripts/deploy.sh [command]
+
+Commands:
+  configure   Configure the AgentCore agent
+  deploy      Deploy to AgentCore
+  status      Check deployment status
+  invoke      Invoke the deployed agent
+  destroy     Destroy the deployment
+  all         Configure and deploy (default)
+
+Environment Variables:
+  AGENT_NAME          Agent name (default: aiops-proactive-workflow)
+  AWS_REGION          AWS region (default: us-east-1)
+  EXECUTION_ROLE_ARN  IAM role ARN for AgentCore
+  DEPLOYMENT_TYPE     container or direct_code_deploy (default: container)
+```
+
+### IAM Roles
+
+#### AgentCore Execution Role
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Trust relationship:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "bedrock.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
+```
+
+#### EventBridge Role
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "bedrock-agentcore:InvokeRuntime",
+    "Resource": "arn:aws:bedrock-agentcore:REGION:ACCOUNT:runtime/*"
+  }]
+}
+```
+
+Trust relationship:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "events.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
 ```
 
 ## S3 Report Structure
@@ -151,8 +354,6 @@ s3://your-reports-bucket/
 ```
 
 ## Report Format
-
-Each service report follows this format:
 
 ```markdown
 # Error Report: payment-service
@@ -172,18 +373,13 @@ Generated: 2024-12-16 10:30:00 UTC
 
 ## Root Cause Analysis
 - Network connectivity issues or service unavailability
-- Database connection pool exhaustion or query issues
+- Database connection pool exhaustion
 
 ## Suggested Fixes
 ### 1. ConnectionRefused
 **Issue:** Service connection failure
 **Fix:** Implement retry logic with exponential backoff
 **Prevention:** Use connection pools and health checks
-
-## Related Logs
-```
-[2024-12-16T10:25:00] [ERROR] [payment-service] Connection refused...
-```
 ```
 
 ## Configuration
@@ -195,15 +391,7 @@ workflow:
   default_time_from: "now-1d"
   default_time_to: "now"
   max_workers: 50
-  use_lightweight_processor: false  # true = Option A, false = Option B
 ```
-
-### Processing Modes
-
-| Mode | Setting | Description |
-|------|---------|-------------|
-| Option A | `use_lightweight_processor: true` | Direct agent calls, faster, less overhead |
-| Option B | `use_lightweight_processor: false` | Full orchestrator per service, more reasoning |
 
 ## Project Structure
 
@@ -213,9 +401,12 @@ aiops-proactive-workflow/
 │   ├── settings.yaml      # Workflow and global settings
 │   ├── agents.yaml        # Agent configurations
 │   └── tools.yaml         # Tool configurations
+├── scripts/
+│   ├── run_local.sh       # Local development script
+│   └── deploy.sh          # AWS deployment script
 ├── src/
 │   ├── agents/
-│   │   ├── base.py        # BaseAgent class
+│   │   ├── base.py
 │   │   ├── datadog_agent.py
 │   │   ├── coding_agent.py
 │   │   ├── servicenow_agent.py
@@ -227,48 +418,18 @@ aiops-proactive-workflow/
 │   │   ├── servicenow_tools.py
 │   │   └── s3_tools.py
 │   ├── workflows/
-│   │   ├── swarm_coordinator.py  # AIOpsSwarm for agent coordination
-│   │   └── proactive_workflow.py # Main workflow with parallel processing
+│   │   ├── swarm_coordinator.py
+│   │   └── proactive_workflow.py
 │   ├── utils/
 │   │   ├── config_loader.py
 │   │   └── logging_config.py
-│   └── main.py            # Entry point
+│   └── main.py
 ├── tests/
 ├── Dockerfile
+├── .dockerignore
 ├── requirements.txt
 └── .env.example
 ```
-
-## AWS Deployment
-
-### AgentCore Deployment
-
-1. Build and push Docker image to ECR:
-```bash
-docker build -t aiops-proactive .
-docker tag aiops-proactive:latest <account>.dkr.ecr.<region>.amazonaws.com/aiops-proactive:latest
-docker push <account>.dkr.ecr.<region>.amazonaws.com/aiops-proactive:latest
-```
-
-2. Configure AgentCore with the image URI
-
-3. Create EventBridge rule to trigger the agent on schedule:
-```
-Schedule: rate(1 day) or cron(0 6 * * ? *)
-Target: Bedrock Agent Runtime API
-```
-
-**Flow:**
-```
-EventBridge (schedule) → Bedrock Agent Runtime API → AgentCore → Proactive Workflow
-```
-
-### IAM Permissions
-
-The AgentCore execution role needs:
-- `bedrock:InvokeModel` for Bedrock LLM calls
-- `s3:PutObject` for report uploads
-- `logs:*` for CloudWatch
 
 ## Environment Variables
 

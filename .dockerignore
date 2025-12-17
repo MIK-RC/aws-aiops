@@ -1,0 +1,60 @@
+# Git
+.git/
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development files
+tests/
+requirements-dev.txt
+pyproject.toml
+
+# Terraform/CDK
+.terraform/
+cdk.out/
+node_modules/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+.DS_Store
+
+# NOTE: .env is NOT excluded - it will be copied into the container
+# This is intentional for container deployment with embedded secrets

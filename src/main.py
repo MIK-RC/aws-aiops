@@ -118,7 +118,43 @@ def health() -> dict:
 
 # Support direct execution for local testing
 if __name__ == "__main__":
-    # When run directly, execute proactive workflow
-    result = invoke({"mode": "proactive"})
-    print(json.dumps(result, indent=2))
-    sys.exit(0 if result.get("success") else 1)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="AIOps Proactive Workflow")
+    parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start the AgentCore server (for container deployment)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port for the server (default: 8080)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["proactive", "swarm"],
+        default="proactive",
+        help="Mode to run (default: proactive)",
+    )
+    parser.add_argument(
+        "--task",
+        type=str,
+        default="",
+        help="Task for swarm mode",
+    )
+    args = parser.parse_args()
+
+    if args.serve:
+        # Start the AgentCore server (for container deployment)
+        logger.info(f"Starting AgentCore server on port {args.port}")
+        app.run(port=args.port)
+    else:
+        # Run workflow directly (for local testing)
+        payload = {"mode": args.mode}
+        if args.task:
+            payload["task"] = args.task
+        result = invoke(payload)
+        print(json.dumps(result, indent=2))
+        sys.exit(0 if result.get("success") else 1)

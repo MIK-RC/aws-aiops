@@ -1,9 +1,9 @@
 # AIOps Proactive Workflow - AgentCore Runtime
 # Deployed on AWS Bedrock AgentCore
 
-FROM public.ecr.aws/lambda/python:3.12
+FROM python:3.12-slim
 
-WORKDIR ${LAMBDA_TASK_ROOT}
+WORKDIR /app
 
 # Install dependencies
 COPY requirements.txt .
@@ -15,10 +15,16 @@ COPY config/ ./config/
 # Copy source code
 COPY src/ ./src/
 
-# Set environment variables
-ENV PYTHONPATH=${LAMBDA_TASK_ROOT}
-ENV PYTHONUNBUFFERED=1
-ENV AIOPS_CONFIG_DIR=${LAMBDA_TASK_ROOT}/config
+# Copy environment file (if present)
+COPY .env* ./
 
-# AgentCore entry point
-CMD ["src.main.invoke"]
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV AIOPS_CONFIG_DIR=/app/config
+
+# Expose the AgentCore server port
+EXPOSE 8080
+
+# Start the AgentCore server
+CMD ["python", "-m", "src.main", "--serve", "--port", "8080"]
