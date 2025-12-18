@@ -15,20 +15,21 @@ fi
 # Install CLI if needed
 pip install -q bedrock-agentcore-starter-toolkit 2>/dev/null || true
 
-# Configure
 agentcore configure -c \
   -n "${AGENT_NAME}" \
   -e "src/main.py" \
   -dt "container" \
   -r "${AWS_REGION:-us-east-1}" \
   -er "$EXECUTION_ROLE_ARN" \
+  -cber "$CODEBUILD_ROLE_ARN" \
+  -ecr "$ECR_REPOSITORY" \
   -ni
 
 # Deploy
 agentcore deploy -a "${AGENT_NAME}" \
   -env "DATADOG_API_KEY=$DATADOG_API_KEY" \
   -env "DATADOG_APP_KEY=$DATADOG_APP_KEY" \
-  -env "DATADOG_SITE=${DATADOG_SITE:-us5}" \
+  -env "DATADOG_SITE=${DATADOG_SITE}" \
   -env "SERVICENOW_INSTANCE=$SERVICENOW_INSTANCE" \
   -env "SERVICENOW_USER=$SERVICENOW_USER" \
   -env "SERVICENOW_PASS=$SERVICENOW_PASS" \
