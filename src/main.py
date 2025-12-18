@@ -7,6 +7,7 @@ Manages scaling, invocations, and health checks automatically.
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -18,6 +19,8 @@ load_dotenv()
 
 from bedrock_agentcore import BedrockAgentCoreApp
 
+from src.agents import OrchestratorAgent
+from src.utils.config_loader import load_settings
 from src.utils.logging_config import get_logger, setup_logging
 from src.workflows import AIOpsSwarm, run_proactive_workflow
 
@@ -54,13 +57,15 @@ def invoke(payload: dict) -> dict:
     try:
         if mode == "proactive":
             return handle_proactive(payload)
+        elif mode == "chat":
+            return handle_chat(payload)
         elif mode == "swarm":
             return handle_swarm(payload)
         else:
             return {
                 "success": False,
                 "error": f"Unknown mode: {mode}",
-                "supported_modes": ["proactive", "swarm"],
+                "supported_modes": ["proactive", "chat", "swarm"],
             }
 
     except Exception as e:
@@ -90,6 +95,65 @@ def handle_proactive(payload: dict) -> dict:
     )
 
     return result
+
+
+def handle_chat(payload: dict) -> dict:
+    """
+    Handle interactive chat mode with session support.
+
+    Uses the OrchestratorAgent with session persistence for
+    multi-turn conversations.
+    """
+    message = payload.get("message", "")
+    session_id = payload.get("session_id")
+
+    if not message:
+        return {"success": False, "error": "Missing 'message' in payload"}
+
+    # Generate session_id if not provided (first interaction)
+    is_new_session = False
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        is_new_session = True
+        logger.info(f"New chat session created: {session_id}")
+    else:
+        logger.info(f"Continuing chat session: {session_id}")
+
+    # Get session storage config
+    settings = load_settings()
+    session_config = settings.get("session", {})
+
+    # Create orchestrator with session
+    orchestrator = OrchestratorAgent(
+        session_id=session_id,
+        use_s3_storage=True,
+        s3_bucket=session_config.get("bucket"),
+        s3_prefix=session_config.get("prefix", "sessions/"),
+    )
+
+    # Invoke the orchestrator with the user message
+    logger.info(f"Processing chat message: {message[:100]}...")
+
+    try:
+        response = orchestrator.invoke(message)
+
+        # Extract the response text
+        response_text = str(response) if response else "No response generated"
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "is_new_session": is_new_session,
+            "response": response_text,
+        }
+
+    except Exception as e:
+        logger.error(f"Chat invocation failed: {e}")
+        return {
+            "success": False,
+            "session_id": session_id,
+            "error": str(e),
+        }
 
 
 def handle_swarm(payload: dict) -> dict:
@@ -131,7 +195,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mode",
-        choices=["proactive", "swarm"],
+        choices=["proactive", "chat", "swarm"],
         default="proactive",
         help="Mode to run (default: proactive)",
     )
@@ -140,6 +204,18 @@ if __name__ == "__main__":
         type=str,
         default="",
         help="Task for swarm mode",
+    )
+    parser.add_argument(
+        "--message",
+        type=str,
+        default="",
+        help="Message for chat mode",
+    )
+    parser.add_argument(
+        "--session-id",
+        type=str,
+        default="",
+        help="Session ID for chat mode (optional, auto-generated if not provided)",
     )
     args = parser.parse_args()
 
@@ -152,6 +228,10 @@ if __name__ == "__main__":
         payload = {"mode": args.mode}
         if args.task:
             payload["task"] = args.task
+        if args.message:
+            payload["message"] = args.message
+        if args.session_id:
+            payload["session_id"] = args.session_id
         result = invoke(payload)
         print(json.dumps(result, indent=2))
         sys.exit(0 if result.get("success") else 1)
