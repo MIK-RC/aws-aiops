@@ -1,286 +1,119 @@
 # AIOps Proactive Workflow
 
-A multi-agent system for proactive operations management. Automatically analyzes services with issues, creates incident tickets, and stores reports to S3.
-
-## Overview
-
-This system runs on AWS Bedrock AgentCore, triggered by EventBridge. When triggered, it:
-
-1. Fetches services with errors/warnings from DataDog
-2. Processes each service in parallel (up to 50 workers)
-3. Analyzes errors and suggests fixes using AI
-4. Creates ServiceNow tickets for significant issues
-5. Uploads individual reports to S3
-6. Generates a summary report
+Multi-agent system for proactive operations management. Analyzes services, creates tickets, and stores reports automatically.
 
 ## Architecture
 
 ```
-EventBridge (scheduled)
+EventBridge (scheduled) / API Gateway
         │
         ▼
-Bedrock Agent Runtime API
+   AgentCore Runtime
         │
         ▼
-┌──────────────────────────────────────────────────────────────┐
-│  AgentCore Runtime (managed by AWS)                           │
-│                                                               │
-│  ┌─────────────┐                                             │
-│  │  main.py    │                                             │
-│  └──────┬──────┘                                             │
-│         │                                                     │
-│         ▼                                                     │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │  ProactiveWorkflow                                       │ │
-│  │                                                          │ │
-│  │  1. DataDog Agent → Fetch services with issues           │ │
-│  │                                                          │ │
-│  │  2. ThreadPoolExecutor (50 workers)                      │ │
-│  │     ┌────────────────────────────────────────────────┐   │ │
-│  │     │  Per Service → AIOpsSwarm:                     │   │ │
-│  │     │  • Coding Agent → Analyze errors               │   │ │
-│  │     │  • ServiceNow Agent → Create ticket            │   │ │
-│  │     │  • S3 Agent → Upload report                    │   │ │
-│  │     │  (Agents coordinate via Swarm handoffs)        │   │ │
-│  │     └────────────────────────────────────────────────┘   │ │
-│  │                                                          │ │
-│  │  3. S3 Agent → Upload summary                            │ │
-│  └─────────────────────────────────────────────────────────┘ │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌──────────────────┐
-│  S3 Bucket       │
-│  ├── {service}/  │
-│  │   └── {ts}.md │
-│  └── summaries/  │
-│      └── {date}/ │
-│          └── .md │
-└──────────────────┘
+┌─────────────────────────────────────────────┐
+│  main.py                                     │
+│                                              │
+│  ├── proactive: Automated daily scan        │
+│  │   └── DataDog → Swarm → S3               │
+│  │                                           │
+│  ├── chat: Interactive troubleshooting      │
+│  │   └── Orchestrator (session-based)       │
+│  │                                           │
+│  └── swarm: One-off task                    │
+│      └── Direct swarm execution             │
+└─────────────────────────────────────────────┘
 ```
 
 ## Agents
 
-| Agent | Responsibility |
-|-------|----------------|
-| DataDog Agent | Fetch error/warning logs, identify affected services |
-| Coding Agent | Analyze errors, identify root causes, suggest fixes |
-| ServiceNow Agent | Create incident tickets for medium+ severity issues |
-| S3 Agent | Upload service reports and summary to S3 |
+| Agent | Purpose |
+|-------|---------|
+| DataDog | Fetch error/warning logs |
+| Coding | Analyze errors, suggest fixes |
+| ServiceNow | Create incident tickets |
+| S3 | Upload reports |
+| Orchestrator | Coordinate agents (chat mode) |
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.12+
-- AWS account with Bedrock access
-- DataDog API credentials
-- ServiceNow instance credentials
-- S3 bucket for reports
-
-### Installation
+## Setup
 
 ```bash
-git clone <repository-url>
-cd aiops-proactive-workflow
-python -m venv venv
-source venv/bin/activate
+# Install
 pip install -r requirements.txt
 
+# Configure
 cp .env.example .env
 # Edit .env with your credentials
 ```
 
-### Configuration
-
-Edit `.env`:
-
-```env
-# AWS
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_DEFAULT_REGION=us-east-1
-
-# DataDog
-DATADOG_API_KEY=your-api-key
-DATADOG_APP_KEY=your-app-key
-DATADOG_SITE=us5
-
-# ServiceNow
-SERVICENOW_INSTANCE=your-instance.service-now.com
-SERVICENOW_USER=your-username
-SERVICENOW_PASS=your-password
-
-# S3 Reports
-S3_REPORTS_BUCKET=your-reports-bucket
-```
-
 ## Local Testing
-
-### Run Workflow Directly
-
-```bash
-python -m src.main --mode proactive
-```
-
-### Start Local Server
 
 ```bash
 # Start server
-python -m src.main --serve --port 8080
+python -m src.main
 
-# Invoke (in another terminal)
+# Test with curl or Postman
 curl -X POST http://localhost:8080/invocations \
   -H "Content-Type: application/json" \
   -d '{"mode": "proactive"}'
 ```
 
-### Run with Docker
+## API Payloads
 
-```bash
-docker build -t aiops-proactive-workflow .
-docker run -p 8080:8080 aiops-proactive-workflow
+### Proactive (automated scan)
+```json
+{"mode": "proactive"}
+```
+
+### Chat (interactive)
+```json
+{"mode": "chat", "message": "Why is payment-service failing?"}
+```
+
+With session:
+```json
+{"mode": "chat", "session_id": "abc-123", "message": "Create a ticket"}
+```
+
+### Swarm (one-off task)
+```json
+{"mode": "swarm", "task": "Analyze auth-service errors"}
 ```
 
 ## AWS Deployment
 
 ### Prerequisites
+- AWS CLI configured
+- IAM role with Bedrock, S3, CloudWatch permissions
 
-1. **AWS CLI** configured with appropriate permissions
-2. **Starter toolkit** installed:
-   ```bash
-   pip install bedrock-agentcore-starter-toolkit
-   ```
-3. **IAM Execution Role** for AgentCore (see IAM section below)
-
-### Step 1: Configure
-
-Set deployment variables in `.env` or export them:
-
-```bash
-export EXECUTION_ROLE_ARN="arn:aws:iam::YOUR_ACCOUNT:role/AgentCoreExecutionRole"
-export AWS_REGION="us-east-1"
-```
-
-### Step 2: Deploy
+### Deploy
 
 ```bash
 ./scripts/deploy.sh
 ```
 
-This will:
-1. Configure the AgentCore agent
-2. Build container in AWS (via CodeBuild)
-3. Deploy to AgentCore Runtime
-4. Return the Runtime ARN
+The script reads credentials from `.env` and deploys to AgentCore.
 
-### Step 3: Verify
+### Check Status
 
 ```bash
-./scripts/deploy.sh status
-./scripts/deploy.sh invoke
+agentcore status
 ```
 
-### Step 4: Configure EventBridge
+### EventBridge (scheduled trigger)
 
 ```bash
-# Create rule (daily at 6 AM UTC)
 aws events put-rule \
-  --name "aiops-daily-proactive" \
-  --schedule-expression "cron(0 6 * * ? *)" \
-  --state ENABLED
+  --name "aiops-daily" \
+  --schedule-expression "cron(0 6 * * ? *)"
 
-# Add target (use Runtime ARN from deploy output)
 aws events put-targets \
-  --rule "aiops-daily-proactive" \
+  --rule "aiops-daily" \
   --targets '[{
-    "Id": "aiops-runtime",
-    "Arn": "arn:aws:bedrock-agentcore:REGION:ACCOUNT:runtime/RUNTIME_ID",
-    "RoleArn": "arn:aws:iam::ACCOUNT:role/EventBridgeAgentCoreRole",
+    "Id": "aiops",
+    "Arn": "YOUR_RUNTIME_ARN",
     "Input": "{\"mode\": \"proactive\"}"
   }]'
-```
-
-### Deployment Script
-
-```bash
-./scripts/deploy.sh [command]
-
-Commands:
-  configure   Configure the AgentCore agent
-  deploy      Deploy to AgentCore
-  status      Check deployment status
-  invoke      Invoke the deployed agent
-  destroy     Destroy the deployment
-  all         Configure and deploy (default)
-```
-
-### IAM Roles
-
-#### AgentCore Execution Role
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::YOUR_BUCKET/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-Trust: `bedrock.amazonaws.com`
-
-#### EventBridge Role
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": "bedrock-agentcore:InvokeRuntime",
-    "Resource": "arn:aws:bedrock-agentcore:REGION:ACCOUNT:runtime/*"
-  }]
-}
-```
-
-Trust: `events.amazonaws.com`
-
-## Project Structure
-
-```
-aiops-proactive-workflow/
-├── config/
-│   ├── settings.yaml
-│   ├── agents.yaml
-│   └── tools.yaml
-├── scripts/
-│   └── deploy.sh
-├── src/
-│   ├── agents/
-│   ├── tools/
-│   ├── workflows/
-│   ├── utils/
-│   └── main.py
-├── tests/
-├── Dockerfile
-├── .dockerignore
-├── requirements.txt
-└── .env.example
 ```
 
 ## Environment Variables
@@ -289,13 +122,26 @@ aiops-proactive-workflow/
 |----------|----------|-------------|
 | DATADOG_API_KEY | Yes | DataDog API key |
 | DATADOG_APP_KEY | Yes | DataDog App key |
-| DATADOG_SITE | No | Default: us5 |
-| SERVICENOW_INSTANCE | Yes | ServiceNow URL |
+| SERVICENOW_INSTANCE | Yes | e.g., company.service-now.com |
 | SERVICENOW_USER | Yes | ServiceNow username |
 | SERVICENOW_PASS | Yes | ServiceNow password |
-| S3_REPORTS_BUCKET | Yes | S3 bucket for reports |
-| AWS_DEFAULT_REGION | No | Default: us-east-1 |
+| S3_REPORTS_BUCKET | Yes | Bucket for reports |
+| EXECUTION_ROLE_ARN | Yes | IAM role for AgentCore |
+
+## Project Structure
+
+```
+├── src/
+│   ├── main.py              # Entry point
+│   ├── agents/              # All agents
+│   ├── tools/               # API clients
+│   └── workflows/           # Proactive + Swarm
+├── config/                  # YAML configs
+├── scripts/deploy.sh        # AWS deployment
+├── Dockerfile
+└── .env.example
+```
 
 ## License
 
-MIT License
+MIT
