@@ -33,19 +33,16 @@ def invoke(payload: dict) -> dict:
     """
     Main entry point for AgentCore invocations.
 
-    Supports two modes:
+    Supports three modes:
     - "proactive": Run the full proactive workflow (default)
+    - "chat": Interactive chat with session support
     - "swarm": Run a single task through the Swarm
 
-    Payload:
-        {
-            "mode": "proactive" | "swarm",
-            "task": "Optional task for swarm mode",
-            "options": {
-                "time_from": "now-1d",
-                "time_to": "now"
-            }
-        }
+    Payload Examples:
+        {"mode": "proactive"}
+        {"mode": "chat", "message": "Why is payment-service failing?"}
+        {"mode": "chat", "session_id": "abc-123", "message": "Create a ticket"}
+        {"mode": "swarm", "task": "Analyze auth-service errors"}
 
     Returns:
         Workflow result dictionary.
