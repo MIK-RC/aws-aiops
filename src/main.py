@@ -7,6 +7,7 @@ Manages scaling, invocations, and health checks automatically.
 
 import json
 import sys
+import threading
 import uuid
 from pathlib import Path
 
@@ -88,23 +89,29 @@ def invoke(payload: dict) -> dict:
 
 
 def handle_proactive(payload: dict) -> dict:
-    """Handle proactive workflow mode."""
-    logger.info("Running proactive workflow")
+    """Handle proactive workflow mode - starts in background, returns immediately."""
 
-    result = run_proactive_workflow()
+    task_id = app.add_async_task("proactive_workflow")
+    logger.info(f"Starting proactive workflow in background (task_id: {task_id})")
 
-    services_total = result.get("services", {}).get("total", 0)
-    tickets_count = len(result.get("tickets_created", []))
-    execution_time = result.get("execution_time_seconds", 0)
+    def run_in_background():
+        try:
+            result = run_proactive_workflow()
+            logger.info(f"Workflow completed: {result}")
+        except Exception as e:
+            logger.error(f"Workflow failed: {e}")
+        finally:
+            app.complete_async_task(task_id)
 
-    logger.info(
-        "Workflow completed: "
-        f"{services_total} services processed, "
-        f"{tickets_count} tickets created, "
-        f"{execution_time:.2f}s"
-    )
+    thread = threading.Thread(target=run_in_background, daemon=True)
+    thread.start()
 
-    return result
+    return {
+        "success": True,
+        "status": "started",
+        "task_id": task_id,
+        "message": "Proactive workflow started in background",
+    }
 
 
 def handle_chat(payload: dict) -> dict:
