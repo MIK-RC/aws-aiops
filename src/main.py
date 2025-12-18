@@ -20,7 +20,6 @@ load_dotenv()
 from bedrock_agentcore import BedrockAgentCoreApp
 
 from src.agents import OrchestratorAgent
-from src.utils.config_loader import load_settings
 from src.utils.logging_config import get_logger, setup_logging
 from src.workflows import AIOpsSwarm, run_proactive_workflow
 
@@ -101,8 +100,8 @@ def handle_chat(payload: dict) -> dict:
     """
     Handle interactive chat mode with session support.
 
-    Uses the OrchestratorAgent with session persistence for
-    multi-turn conversations.
+    Uses the OrchestratorAgent for multi-turn conversations.
+    AgentCore handles session persistence automatically.
     """
     message = payload.get("message", "")
     session_id = payload.get("session_id")
@@ -119,17 +118,9 @@ def handle_chat(payload: dict) -> dict:
     else:
         logger.info(f"Continuing chat session: {session_id}")
 
-    # Get session storage config
-    settings = load_settings()
-    session_config = settings.get("session", {})
-
     # Create orchestrator with session
-    orchestrator = OrchestratorAgent(
-        session_id=session_id,
-        use_s3_storage=True,
-        s3_bucket=session_config.get("bucket"),
-        s3_prefix=session_config.get("prefix", "sessions/"),
-    )
+    # AgentCore handles session persistence via its Memory service
+    orchestrator = OrchestratorAgent(session_id=session_id)
 
     # Invoke the orchestrator with the user message
     logger.info(f"Processing chat message: {message[:100]}...")
@@ -193,30 +184,6 @@ if __name__ == "__main__":
         default=8080,
         help="Port for the server (default: 8080)",
     )
-    parser.add_argument(
-        "--mode",
-        choices=["proactive", "chat", "swarm"],
-        default="proactive",
-        help="Mode to run (default: proactive)",
-    )
-    parser.add_argument(
-        "--task",
-        type=str,
-        default="",
-        help="Task for swarm mode",
-    )
-    parser.add_argument(
-        "--message",
-        type=str,
-        default="",
-        help="Message for chat mode",
-    )
-    parser.add_argument(
-        "--session-id",
-        type=str,
-        default="",
-        help="Session ID for chat mode (optional, auto-generated if not provided)",
-    )
     args = parser.parse_args()
 
     if args.serve:
@@ -224,14 +191,7 @@ if __name__ == "__main__":
         logger.info(f"Starting AgentCore server on port {args.port}")
         app.run(port=args.port)
     else:
-        # Run workflow directly (for local testing)
-        payload = {"mode": args.mode}
-        if args.task:
-            payload["task"] = args.task
-        if args.message:
-            payload["message"] = args.message
-        if args.session_id:
-            payload["session_id"] = args.session_id
-        result = invoke(payload)
+        # Run proactive workflow directly (for local testing)
+        result = invoke({"mode": "proactive"})
         print(json.dumps(result, indent=2))
         sys.exit(0 if result.get("success") else 1)
