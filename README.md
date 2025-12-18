@@ -27,12 +27,12 @@ EventBridge (scheduled) / API Gateway
 
 ## Agents
 
-| Agent | Purpose |
-|-------|---------|
-| DataDog | Fetch error/warning logs |
-| Coding | Analyze errors, suggest fixes |
-| ServiceNow | Create incident tickets |
-| S3 | Upload reports |
+| Agent        | Purpose                       |
+| ------------ | ----------------------------- |
+| DataDog      | Fetch error/warning logs      |
+| Coding       | Analyze errors, suggest fixes |
+| ServiceNow   | Create incident tickets       |
+| S3           | Upload reports                |
 | Orchestrator | Coordinate agents (chat mode) |
 
 ## Setup
@@ -118,15 +118,15 @@ aws events put-targets \
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| DATADOG_API_KEY | Yes | DataDog API key |
-| DATADOG_APP_KEY | Yes | DataDog App key |
-| SERVICENOW_INSTANCE | Yes | e.g., company.service-now.com |
-| SERVICENOW_USER | Yes | ServiceNow username |
-| SERVICENOW_PASS | Yes | ServiceNow password |
-| S3_REPORTS_BUCKET | Yes | Bucket for reports |
-| EXECUTION_ROLE_ARN | Yes | IAM role for AgentCore |
+| Variable            | Required | Description                   |
+| ------------------- | -------- | ----------------------------- |
+| DATADOG_API_KEY     | Yes      | DataDog API key               |
+| DATADOG_APP_KEY     | Yes      | DataDog App key               |
+| SERVICENOW_INSTANCE | Yes      | e.g., company.service-now.com |
+| SERVICENOW_USER     | Yes      | ServiceNow username           |
+| SERVICENOW_PASS     | Yes      | ServiceNow password           |
+| S3_REPORTS_BUCKET   | Yes      | Bucket for reports            |
+| EXECUTION_ROLE_ARN  | Yes      | IAM role for AgentCore        |
 
 ## Project Structure
 
