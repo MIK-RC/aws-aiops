@@ -12,6 +12,8 @@ from pathlib import Path
 
 from bedrock_agentcore import BedrockAgentCoreApp
 from dotenv import load_dotenv
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -25,8 +27,18 @@ from src.workflows import AIOpsSwarm, run_proactive_workflow
 setup_logging()
 logger = get_logger("main")
 
-# Initialize AgentCore app
-app = BedrockAgentCoreApp()
+# Initialize AgentCore app with CORS middleware
+app = BedrockAgentCoreApp(
+    middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["GET", "POST"],
+            allow_headers=["*"],
+        )
+    ]
+)
 
 
 @app.entrypoint
