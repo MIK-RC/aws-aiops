@@ -45,6 +45,11 @@ class S3Client:
             bucket: S3 bucket name. Defaults to S3_REPORTS_BUCKET env var.
             region: AWS region. Defaults to config.
         """
+        # Ensure environment variables are loaded from .env file
+        from dotenv import load_dotenv
+
+        load_dotenv()
+
         settings = load_settings()
 
         self._bucket = bucket or os.environ.get("S3_REPORTS_BUCKET")
@@ -53,7 +58,21 @@ class S3Client:
         if not self._bucket:
             logger.warning("S3 reports bucket not configured")
 
-        self._client = boto3.client("s3", region_name=self._region)
+        # Get AWS credentials from environment
+        aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+        # Create client with explicit credentials if available
+        if aws_access_key and aws_secret_key:
+            self._client = boto3.client(
+                "s3",
+                region_name=self._region,
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+            )
+        else:
+            # Fall back to default credential chain (IAM role, ~/.aws/credentials, etc.)
+            self._client = boto3.client("s3", region_name=self._region)
 
     def upload_report(
         self,
