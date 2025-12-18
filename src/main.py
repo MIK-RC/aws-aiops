@@ -5,19 +5,19 @@ AgentCore Runtime wrapper for the AIOps Proactive Workflow.
 Manages scaling, invocations, and health checks automatically.
 """
 
+import argparse
 import json
 import sys
 import uuid
 from pathlib import Path
 
+from bedrock_agentcore import BedrockAgentCoreApp
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from dotenv import load_dotenv
-
 load_dotenv()
-
-from bedrock_agentcore import BedrockAgentCoreApp
 
 from src.agents import OrchestratorAgent
 from src.utils.logging_config import get_logger, setup_logging
@@ -37,7 +37,7 @@ def invoke(payload: dict) -> dict:
 
     Supports three modes:
     - "proactive": Run the full proactive workflow (default)
-    - "chat": Interactive chat with session support
+    - "chat": Interactive chat with session support (A new session ID is created if not provided in payload)
     - "swarm": Run a single task through the Swarm
 
     Payload Examples:
@@ -170,8 +170,6 @@ def health() -> dict:
 
 # Support direct execution for local testing
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="AIOps Proactive Workflow")
     parser.add_argument(
         "--serve",
