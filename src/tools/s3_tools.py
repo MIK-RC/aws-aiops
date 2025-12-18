@@ -45,6 +45,12 @@ class S3Client:
             bucket: S3 bucket name. Defaults to S3_REPORTS_BUCKET env var.
             region: AWS region. Defaults to config.
         """
+        # Ensure environment variables are loaded from .env file (for local development)
+        # In deployed environments, this is a no-op and boto3 uses IAM role credentials
+        from dotenv import load_dotenv
+
+        load_dotenv()
+
         settings = load_settings()
 
         self._bucket = bucket or os.environ.get("S3_REPORTS_BUCKET")
@@ -53,6 +59,9 @@ class S3Client:
         if not self._bucket:
             logger.warning("S3 reports bucket not configured")
 
+        # Use boto3 default credential chain:
+        # - Local: picks up AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY from environment
+        # - Deployed: automatically uses IAM role credentials
         self._client = boto3.client("s3", region_name=self._region)
 
     def upload_report(

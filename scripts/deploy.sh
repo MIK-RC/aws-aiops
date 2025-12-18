@@ -5,8 +5,12 @@
 set -e
 cd "$(dirname "$0")/.."
 
-# Load environment
-[ -f .env ] && source .env
+# Load environment and EXPORT variables to child processes
+if [ -f .env ]; then
+  set -a  # Enable auto-export mode
+  source .env
+  set +a  # Disable auto-export mode
+fi
 
 # Install CLI if needed
 pip install -q bedrock-agentcore-starter-toolkit 2>/dev/null || true
