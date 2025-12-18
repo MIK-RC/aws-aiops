@@ -27,4 +27,4 @@ ENV AIOPS_CONFIG_DIR=/app/config
 EXPOSE 8080
 
 # Start the AgentCore server
-CMD ["python", "-m", "src.main", "--serve", "--port", "8080"]
+CMD ["python", "-m", "src.main"]
