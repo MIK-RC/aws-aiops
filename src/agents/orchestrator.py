@@ -5,9 +5,9 @@ Central coordinator agent that manages all specialist agents and user interactio
 Maintains conversation history and generates comprehensive reports.
 """
 
-from strands.session import FileSessionManager, S3SessionManager
+from strands.session import FileSessionManager
 
-from ..utils.config_loader import get_config
+from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 from .base import BaseAgent
 from .coding_agent import CodingAgent
@@ -54,10 +54,6 @@ class OrchestratorAgent(BaseAgent):
         model_id: str | None = None,
         region: str | None = None,
         session_id: str | None = None,
-        use_s3_storage: bool = False,
-        s3_bucket: str | None = None,
-        s3_prefix: str = "sessions/",
-        storage_dir: str | None = None,
     ):
         """
         Initialize the Orchestrator Agent.
@@ -66,21 +62,12 @@ class OrchestratorAgent(BaseAgent):
             model_id: Optional Bedrock model ID override.
             region: Optional AWS region override.
             session_id: Session ID for conversation persistence.
-            use_s3_storage: Whether to use S3 for session storage.
-            s3_bucket: S3 bucket name (required if use_s3_storage=True).
-            s3_prefix: S3 key prefix for session data.
-            storage_dir: Local directory for file-based session storage.
+                       When deployed on AgentCore, sessions are managed automatically.
         """
         # Create session manager if session_id provided
         session_manager = None
         if session_id:
-            session_manager = self._create_session_manager(
-                session_id=session_id,
-                use_s3=use_s3_storage,
-                s3_bucket=s3_bucket,
-                s3_prefix=s3_prefix,
-                storage_dir=storage_dir,
-            )
+            session_manager = self._create_session_manager(session_id=session_id)
 
         # Initialize specialist agents (lazy loaded)
         self._datadog_agent: DataDogAgent | None = None
@@ -98,33 +85,18 @@ class OrchestratorAgent(BaseAgent):
         )
 
     @staticmethod
-    def _create_session_manager(
-        session_id: str,
-        use_s3: bool,
-        s3_bucket: str | None,
-        s3_prefix: str,
-        storage_dir: str | None,
-    ):
-        """Create the appropriate session manager."""
-        config = get_config().settings.session
+    def _create_session_manager(session_id: str):
+        """
+        Create session manager for conversation persistence.
 
-        if use_s3:
-            bucket = s3_bucket or config.bucket
-            prefix = s3_prefix or config.prefix
-
-            _module_logger.info(f"Using S3 session storage: s3://{bucket}/{prefix}")
-            return S3SessionManager(
-                session_id=session_id,
-                bucket=bucket,
-                prefix=prefix,
-            )
-        else:
-            directory = storage_dir or "./sessions"
-            _module_logger.info(f"Using file session storage: {directory}")
-            return FileSessionManager(
-                session_id=session_id,
-                storage_dir=directory,
-            )
+        Uses file-based storage locally. When deployed on AgentCore,
+        the AgentCore Memory service handles persistence automatically.
+        """
+        _module_logger.info(f"Creating session manager for: {session_id}")
+        return FileSessionManager(
+            session_id=session_id,
+            storage_dir="./sessions",
+        )
 
     def get_tools(self) -> list:
         """

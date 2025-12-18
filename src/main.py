@@ -1,259 +1,192 @@
 """
 Main Entry Point
 
-Command-line interface for the AIOps Multi-Agent System.
-Provides local testing and development capabilities.
+AgentCore Runtime wrapper for the AIOps Proactive Workflow.
+Manages scaling, invocations, and health checks automatically.
 """
 
-import argparse
 import json
 import sys
+import threading
+import uuid
 from pathlib import Path
 
-# Add project root to path for direct script execution
+from bedrock_agentcore import BedrockAgentCoreApp
+from dotenv import load_dotenv
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from dotenv import load_dotenv
-
 load_dotenv()
 
-from src.agents import CodingAgent, DataDogAgent, OrchestratorAgent, ServiceNowAgent
+from src.agents import OrchestratorAgent
 from src.utils.logging_config import get_logger, setup_logging
-from src.workflows import AIOpsSwarm, run_daily_analysis
+from src.workflows import AIOpsSwarm, run_proactive_workflow
 
+setup_logging()
 logger = get_logger("main")
 
+# Initialize AgentCore app with CORS middleware
+app = BedrockAgentCoreApp(
+    middleware=[
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["GET", "POST"],
+            allow_headers=["*"],
+        )
+    ]
+)
 
-def main():
-    """Main entry point for CLI."""
-    parser = argparse.ArgumentParser(
-        description="AIOps Multi-Agent System CLI",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Interactive chat with orchestrator
-  python src/main.py chat "Analyze errors in the payment service"
-  
-  # Run daily analysis
-  python src/main.py analyze --time-from now-1d --create-tickets
-  
-  # Run swarm task
-  python src/main.py swarm "Investigate database connection issues"
-  
-  # Test individual agents
-  python src/main.py test-agent datadog
-        """,
-    )
 
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default="INFO",
-        help="Logging level",
-    )
+@app.entrypoint
+def invoke(payload: dict) -> dict:
+    """
+    Main entry point for AgentCore invocations.
 
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    Supports three modes:
+    - "proactive": Run the full proactive workflow (default)
+    - "chat": Interactive chat with session support (A new session ID is created if not provided in payload)
+    - "swarm": Run a single task through the Swarm
 
-    # Chat command
-    chat_parser = subparsers.add_parser("chat", help="Interactive chat with orchestrator")
-    chat_parser.add_argument("prompt", help="Message to send to the orchestrator")
-    chat_parser.add_argument("--session-id", help="Session ID for conversation persistence")
+    Payload Examples:
+        {"mode": "proactive"}
+        {"mode": "chat", "message": "Why is payment-service failing?"}
+        {"mode": "chat", "session_id": "abc-123", "message": "Create a ticket"}
+        {"mode": "swarm", "task": "Analyze auth-service errors"}
 
-    # Analyze command
-    analyze_parser = subparsers.add_parser("analyze", help="Run analysis workflow")
-    analyze_parser.add_argument(
-        "--time-from", default="now-1d", help="Start time (default: now-1d)"
-    )
-    analyze_parser.add_argument("--time-to", default="now", help="End time (default: now)")
-    analyze_parser.add_argument(
-        "--create-tickets", action="store_true", help="Create ServiceNow tickets"
-    )
-    analyze_parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
+    Returns:
+        Workflow result dictionary.
+    """
+    logger.info(f"AgentCore invoked: {json.dumps(payload)[:200]}...")
 
-    # Swarm command
-    swarm_parser = subparsers.add_parser("swarm", help="Run task through agent swarm")
-    swarm_parser.add_argument("task", help="Task description for the swarm")
-
-    # Test agent command
-    test_parser = subparsers.add_parser("test-agent", help="Test individual agent")
-    test_parser.add_argument(
-        "agent",
-        choices=["datadog", "coding", "servicenow", "orchestrator"],
-        help="Agent to test",
-    )
-    test_parser.add_argument("--prompt", help="Custom prompt for testing")
-
-    # Daily report command
-    daily_parser = subparsers.add_parser("daily-report", help="Run daily analysis report")
-    daily_parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
-
-    args = parser.parse_args()
-
-    # Setup logging
-    setup_logging(level=args.log_level)
-
-    if args.command is None:
-        parser.print_help()
-        sys.exit(0)
+    mode = payload.get("mode", "proactive")
 
     try:
-        if args.command == "chat":
-            result = cmd_chat(args.prompt, args.session_id)
-        elif args.command == "analyze":
-            result = cmd_analyze(
-                args.time_from,
-                args.time_to,
-                args.create_tickets,
-                args.dry_run,
-            )
-        elif args.command == "swarm":
-            result = cmd_swarm(args.task)
-        elif args.command == "test-agent":
-            result = cmd_test_agent(args.agent, args.prompt)
-        elif args.command == "daily-report":
-            result = cmd_daily_report(args.dry_run)
+        if mode == "proactive":
+            return handle_proactive(payload)
+        elif mode == "chat":
+            return handle_chat(payload)
+        elif mode == "swarm":
+            return handle_swarm(payload)
         else:
-            parser.print_help()
-            sys.exit(1)
+            return {
+                "success": False,
+                "error": f"Unknown mode: {mode}",
+                "supported_modes": ["proactive", "chat", "swarm"],
+            }
 
-        # Print result
-        if isinstance(result, dict):
-            print(json.dumps(result, indent=2))
-        else:
-            print(result)
-
-    except KeyboardInterrupt:
-        print("\nOperation cancelled")
-        sys.exit(0)
     except Exception as e:
-        logger.error(f"Command failed: {e}")
-        sys.exit(1)
+        logger.error(f"Invocation failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "mode": mode,
+        }
 
 
-def cmd_chat(prompt: str, session_id: str = "") -> str:
-    """Handle chat command."""
-    logger.info(f"Starting chat: {prompt[:50]}...")
+def handle_proactive(payload: dict) -> dict:
+    """Handle proactive workflow mode - starts in background, returns immediately."""
 
-    orchestrator = OrchestratorAgent(
-        session_id=session_id,
-        use_s3_storage=False,
-        storage_dir="./sessions",
-    )
+    task_id = app.add_async_task("proactive_workflow")
+    logger.info(f"Starting proactive workflow in background (task_id: {task_id})")
 
-    response = orchestrator.invoke(prompt)
+    def run_in_background():
+        try:
+            result = run_proactive_workflow()
+            logger.info(f"Workflow completed: {result}")
+        except Exception as e:
+            logger.error(f"Workflow failed: {e}")
+        finally:
+            app.complete_async_task(task_id)
 
-    print("\n" + "=" * 60)
-    print("ORCHESTRATOR RESPONSE")
-    print("=" * 60)
+    thread = threading.Thread(target=run_in_background, daemon=True)
+    thread.start()
 
-    return response
-
-
-def cmd_analyze(
-    time_from: str,
-    time_to: str,
-    create_tickets: bool,
-    dry_run: bool,
-) -> dict:
-    """Handle analyze command."""
-    logger.info(f"Starting analysis: {time_from} to {time_to}")
-
-    result = run_daily_analysis(
-        time_from=time_from,
-        time_to=time_to,
-        create_tickets=create_tickets,
-        dry_run=dry_run,
-    )
-
-    print("\n" + "=" * 60)
-    print("ANALYSIS REPORT")
-    print("=" * 60)
-    print(result.get("summary", "No summary available"))
-    print("=" * 60)
-
-    return result
+    return {
+        "success": True,
+        "status": "started",
+        "task_id": task_id,
+        "message": "Proactive workflow started in background",
+    }
 
 
-def cmd_swarm(task: str) -> dict:
-    """Handle swarm command."""
-    logger.info(f"Starting swarm task: {task[:50]}...")
+def handle_chat(payload: dict) -> dict:
+    """
+    Handle interactive chat mode with session support.
+
+    Uses the OrchestratorAgent for multi-turn conversations.
+    AgentCore handles session persistence automatically.
+    """
+    message = payload.get("message", "")
+    session_id = payload.get("session_id")
+
+    if not message:
+        return {"success": False, "error": "Missing 'message' in payload"}
+
+    # Generate session_id if not provided (first interaction)
+    is_new_session = False
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        is_new_session = True
+        logger.info(f"New chat session created: {session_id}")
+    else:
+        logger.info(f"Continuing chat session: {session_id}")
+
+    # Create orchestrator with session
+    # AgentCore handles session persistence via its Memory service
+    orchestrator = OrchestratorAgent(session_id=session_id)
+
+    # Invoke the orchestrator with the user message
+    logger.info(f"Processing chat message: {message[:100]}...")
+
+    try:
+        response = orchestrator.invoke(message)
+
+        # Extract the response text
+        response_text = str(response) if response else "No response generated"
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "is_new_session": is_new_session,
+            "response": response_text,
+        }
+
+    except Exception as e:
+        logger.error(f"Chat invocation failed: {e}")
+        return {
+            "success": False,
+            "session_id": session_id,
+            "error": str(e),
+        }
+
+
+def handle_swarm(payload: dict) -> dict:
+    """Handle swarm task mode."""
+    task = payload.get("task", "")
+
+    if not task:
+        return {"success": False, "error": "Missing 'task' in payload"}
+
+    logger.info(f"Running swarm task: {task[:100]}...")
 
     swarm = AIOpsSwarm()
     result = swarm.run(task)
 
-    print("\n" + "=" * 60)
-    print("SWARM RESULT")
-    print("=" * 60)
-    print(result.summary)
-    print("=" * 60)
-
     return result.to_dict()
 
 
-def cmd_test_agent(agent_name: str, prompt: str = "") -> str:
-    """Handle test-agent command."""
-    logger.info(f"Testing agent: {agent_name}")
-
-    # Default test prompts
-    default_prompts = {
-        "datadog": "Fetch the last hour of error logs",
-        "coding": "Analyze this error: NullPointerException at line 42",
-        "servicenow": "Create a test ticket for database issues",
-        "orchestrator": "What services have errors in the last 24 hours?",
-    }
-
-    test_prompt = prompt or default_prompts.get(agent_name, "Hello")
-
-    # Create agent
-    agent_classes = {
-        "datadog": DataDogAgent,
-        "coding": CodingAgent,
-        "servicenow": ServiceNowAgent,
-        "orchestrator": OrchestratorAgent,
-    }
-
-    agent_class = agent_classes.get(agent_name)
-    if not agent_class:
-        return f"Unknown agent: {agent_name}"
-
-    agent = agent_class()
-
-    print(f"\n{'=' * 60}")
-    print(f"TESTING {agent_name.upper()} AGENT")
-    print(f"Prompt: {test_prompt}")
-    print("=" * 60)
-
-    response = agent.invoke(test_prompt)
-
-    print("\nResponse:")
-    print(response)
-
-    print("\nAction History:")
-    print(agent.get_action_summary())
-
-    return response
+@app.ping
+def health() -> dict:
+    """Health check endpoint for AgentCore (GET /ping)."""
+    return {"status": "healthy", "service": "aiops-proactive-workflow"}
 
 
-def cmd_daily_report(dry_run: bool) -> dict:
-    """Handle daily-report command."""
-    logger.info("Running daily report")
-
-    result = run_daily_analysis(
-        time_from="now-1d",
-        time_to="now",
-        create_tickets=True,
-        dry_run=dry_run,
-    )
-
-    print("\n" + "=" * 60)
-    print("DAILY REPORT")
-    print("=" * 60)
-    print(result.get("summary", "No summary available"))
-    print("=" * 60)
-
-    return result
-
-
+# Start the AgentCore server when executed directly
 if __name__ == "__main__":
-    main()
+    logger.info("Starting AgentCore server on port 8080")
+    app.run(port=8080)

@@ -15,6 +15,7 @@ from src.agents.base import BaseAgent, AgentAction, AgentState
 from src.agents.datadog_agent import DataDogAgent
 from src.agents.coding_agent import CodingAgent
 from src.agents.servicenow_agent import ServiceNowAgent
+from src.agents.s3_agent import S3Agent
 from src.agents.orchestrator import OrchestratorAgent
 
 
@@ -251,6 +252,29 @@ class TestOrchestratorAgent:
         assert "Orchestrator" in report
 
 
+class TestS3Agent:
+    """Tests for S3Agent."""
+    
+    @pytest.fixture
+    def agent(self):
+        """Create an S3 agent with mocked dependencies."""
+        with patch("src.agents.s3_agent.S3Client"):
+            with patch("src.agents.base.Agent"):
+                with patch("src.agents.base.BedrockModel"):
+                    agent = S3Agent()
+        return agent
+    
+    def test_agent_has_correct_type(self, agent):
+        """Test agent has correct type."""
+        assert agent._agent_type == "s3"
+    
+    def test_get_tools_returns_list(self, agent):
+        """Test get_tools returns a list."""
+        tools = agent.get_tools()
+        assert isinstance(tools, list)
+        assert len(tools) == 2  # upload_service_report, upload_summary_report
+
+
 class TestStandaloneUsage:
     """Tests to verify agents can be used standalone."""
     
@@ -288,6 +312,17 @@ class TestStandaloneUsage:
                     assert agent.agent_name is not None
                     assert hasattr(agent, "create_ticket")
                     assert hasattr(agent, "update_ticket")
+    
+    def test_s3_agent_standalone(self):
+        """Test S3 agent can be instantiated standalone."""
+        with patch("src.agents.s3_agent.S3Client"):
+            with patch("src.agents.base.Agent"):
+                with patch("src.agents.base.BedrockModel"):
+                    agent = S3Agent()
+                    
+                    # Agent should be fully functional
+                    assert agent.agent_name is not None
+                    assert hasattr(agent, "upload_report")
 
 
 if __name__ == "__main__":

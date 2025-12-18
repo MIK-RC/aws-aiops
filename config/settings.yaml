@@ -8,11 +8,11 @@ aws:
   bedrock_endpoint: null
 
 session:
-  # S3 bucket for storing agent sessions/memory
-  bucket: "aiops-agent-sessions"
-  prefix: "sessions/"
-  # Session TTL in seconds (7 days)
-  ttl: 604800
+  # Session TTL in seconds (7 days = 604800)
+  # AgentCore Memory service handles persistence automatically when deployed
+  ttl_seconds: 604800
+  # Maximum conversation history to retain per session
+  max_history_length: 50
 
 logging:
   level: "INFO"
@@ -20,13 +20,15 @@ logging:
   # Enable JSON logging for production
   json_format: false
 
-# Cron job settings
-cron:
+# Workflow settings
+workflow:
   # Time range for log queries (supports DataDog time syntax)
   default_time_from: "now-1d"
   default_time_to: "now"
-  # Schedule expression (daily at 6 AM UTC)
-  schedule: "cron(0 6 * * ? *)"
+  # Maximum parallel workers for service processing
+  max_workers: 50
+  # Use lightweight processor (Option A) instead of full orchestrator (Option B)
+  use_lightweight_processor: false
 
 # Rate limiting and safety
 rate_limits:

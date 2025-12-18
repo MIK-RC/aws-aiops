@@ -1,5 +1,5 @@
 # ============================================
-# AIOps Multi-Agent System - Development Dependencies
+# AIOps Proactive Workflow - Development Dependencies
 # ============================================
 
 # Include production dependencies
@@ -9,15 +9,13 @@
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
-moto>=4.2.0  # AWS mocking
-httpx>=0.27.0  # For testing FastAPI
+moto>=4.2.0
 
 # Type Checking
 mypy>=1.5.0
 
 # Linting & Formatting
 ruff>=0.1.0
-black>=23.9.0
 
 # Documentation
 mkdocs>=1.5.0

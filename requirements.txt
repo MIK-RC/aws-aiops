@@ -1,23 +1,18 @@
 # ============================================
-# AIOps Multi-Agent System - Dependencies
+# AIOps Proactive Workflow - Dependencies
 # Python 3.12+ required
 # ============================================
 
 # Core Agent Framework
-strands-agents==1.19.0
+strands-agents>=1.19.0
 strands-agents-tools>=0.1.0
 
 # AWS SDK
 boto3>=1.35.0,<2.0.0
 botocore>=1.35.0,<2.0.0
 
-# AgentCore Runtime (for production deployment)
+# AgentCore Runtime
 bedrock-agentcore>=0.1.0
-bedrock-agentcore-starter-toolkit>=0.1.0
-
-# FastAPI (API Server)
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
 
 # Configuration Management
 PyYAML>=6.0.1

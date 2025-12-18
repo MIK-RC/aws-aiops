@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from src.tools.datadog_tools import DataDogClient, query_logs, extract_unique_services, format_logs_for_analysis
 from src.tools.servicenow_tools import ServiceNowClient, create_incident, update_incident, get_incident_status
 from src.tools.code_analysis_tools import CodeAnalyzer, analyze_error_patterns, suggest_code_fix, assess_severity
+from src.tools.s3_tools import S3Client, upload_service_report, upload_summary_report
 
 
 class TestDataDogClient:
@@ -222,6 +223,43 @@ class TestCodeAnalyzer:
         assert any(s["error_type"] == "ConnectionRefused" for s in suggestions)
 
 
+class TestS3Client:
+    """Tests for S3Client."""
+    
+    @pytest.fixture
+    def client(self):
+        """Create an S3 client with mock credentials."""
+        with patch.dict(os.environ, {
+            "S3_REPORTS_BUCKET": "test-bucket",
+            "AWS_DEFAULT_REGION": "us-east-1",
+        }):
+            with patch("src.tools.s3_tools.boto3.client"):
+                return S3Client()
+    
+    def test_client_initialization(self, client):
+        """Test client initializes with correct configuration."""
+        assert client._bucket == "test-bucket"
+    
+    @patch("src.tools.s3_tools.boto3.client")
+    def test_upload_report(self, mock_boto):
+        """Test report upload."""
+        with patch.dict(os.environ, {
+            "S3_REPORTS_BUCKET": "test-bucket",
+        }):
+            mock_s3 = Mock()
+            mock_boto.return_value = mock_s3
+            
+            client = S3Client()
+            result = client.upload_report(
+                service_name="test-service",
+                content="# Test Report",
+            )
+            
+            assert result["success"] is True
+            assert "s3://" in result["s3_uri"]
+            mock_s3.put_object.assert_called_once()
+
+
 class TestToolFunctions:
     """Tests for tool functions (decorated with @tool)."""
     
@@ -240,6 +278,16 @@ class TestToolFunctions:
         """Test analyze_error_patterns tool function has correct metadata."""
         assert hasattr(analyze_error_patterns, "__name__")
         assert analyze_error_patterns.__name__ == "analyze_error_patterns"
+    
+    def test_upload_service_report_tool(self):
+        """Test upload_service_report tool function has correct metadata."""
+        assert hasattr(upload_service_report, "__name__")
+        assert upload_service_report.__name__ == "upload_service_report"
+    
+    def test_upload_summary_report_tool(self):
+        """Test upload_summary_report tool function has correct metadata."""
+        assert hasattr(upload_summary_report, "__name__")
+        assert upload_summary_report.__name__ == "upload_summary_report"
 
 
 if __name__ == "__main__":
