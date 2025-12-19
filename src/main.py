@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 
 from bedrock_agentcore import BedrockAgentCoreApp
+from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 from dotenv import load_dotenv
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
@@ -129,7 +130,14 @@ def handle_chat(payload: dict) -> dict:
     if not message:
         return {"success": False, "error": "Missing 'message' in payload"}
 
-    # Generate session_id if not provided (first interaction)
+    # Try to get session_id from AgentCore context first (when deployed)
+    # AgentCore provides session ID via X-Amzn-Bedrock-AgentCore-Runtime-Session-Id header
+    agentcore_session_id = BedrockAgentCoreContext.get_session_id()
+    if agentcore_session_id:
+        session_id = agentcore_session_id
+        logger.info(f"Using AgentCore-provided session ID: {session_id}")
+
+    # Generate session_id if not provided (local development or first interaction)
     is_new_session = False
     if not session_id:
         session_id = str(uuid.uuid4())
@@ -138,13 +146,14 @@ def handle_chat(payload: dict) -> dict:
     else:
         logger.info(f"Continuing chat session: {session_id}")
 
-    # Generate actor_id if not provided
+    # Use actor_id from payload, or default to session_id for consistency
     # Actor ID identifies the user/entity in AgentCore Memory
+    # Using session_id as default ensures messages are found across invocations
     is_new_actor = False
     if not actor_id:
-        actor_id = f"user-{uuid.uuid4().hex[:12]}"
-        is_new_actor = True
-        logger.info(f"New actor created: {actor_id}")
+        actor_id = session_id  # Use session_id as actor_id for consistent lookup
+        is_new_actor = is_new_session
+        logger.info(f"Using session_id as actor_id: {actor_id}")
 
     # Create orchestrator with session and memory enabled
     # Memory persistence is handled via AgentCore Memory service when deployed

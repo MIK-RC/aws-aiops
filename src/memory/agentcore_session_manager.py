@@ -81,11 +81,10 @@ def create_agentcore_session_manager(
     # Resolve region
     resolved_region = region or aws_config.get("region", "us-east-1")
 
-    # Resolve actor_id (generate unique ID if not specified)
+    # Resolve actor_id - use session_id if not specified for consistent memory lookup
     if not actor_id:
-        import uuid
-        resolved_actor_id = f"user-{uuid.uuid4().hex[:12]}"
-        logger.info(f"Generated actor_id: {resolved_actor_id}")
+        resolved_actor_id = session_id
+        logger.info(f"Using session_id as actor_id: {resolved_actor_id}")
     else:
         resolved_actor_id = actor_id
 
