@@ -124,35 +124,31 @@ def handle_chat(payload: dict) -> dict:
     history is persisted via the AgentCore Memory service.
     """
     message = payload.get("message", "")
-    session_id = payload.get("session_id")
     actor_id = payload.get("actor_id")
 
     if not message:
         return {"success": False, "error": "Missing 'message' in payload"}
 
-    # Try to get session_id from AgentCore context first (when deployed)
-    # AgentCore provides session ID via X-Amzn-Bedrock-AgentCore-Runtime-Session-Id header
-    agentcore_session_id = BedrockAgentCoreContext.get_session_id()
-    if agentcore_session_id:
-        session_id = agentcore_session_id
-        logger.info(f"Using AgentCore-provided session ID: {session_id}")
-
-    # Generate session_id if not provided (local development or first interaction)
-    is_new_session = False
-    if not session_id:
-        session_id = str(uuid.uuid4())
-        is_new_session = True
-        logger.info(f"New chat session created: {session_id}")
+    # Get session_id from AgentCore context (provided via request header)
+    # AgentCore manages session IDs - we don't generate our own
+    session_id = BedrockAgentCoreContext.get_session_id()
+    
+    if session_id:
+        logger.info(f"Using AgentCore session ID: {session_id}")
     else:
-        logger.info(f"Continuing chat session: {session_id}")
+        # Fallback for local development only
+        session_id = payload.get("session_id") or str(uuid.uuid4())
+        logger.warning(f"No AgentCore session ID found, using fallback: {session_id}")
+    
+    is_new_session = False  # AgentCore manages session lifecycle
 
     # Generate actor_id if not provided
     # Actor ID identifies the user/entity in AgentCore Memory
-    is_new_actor = False
     if not actor_id:
         actor_id = f"user-{uuid.uuid4().hex[:12]}"
-        is_new_actor = True
-        logger.info(f"New actor created: {actor_id}")
+        logger.info(f"Generated actor_id: {actor_id}")
+    else:
+        logger.info(f"Using provided actor_id: {actor_id}")
 
     # Create orchestrator with session and memory enabled
     # Memory persistence is handled via AgentCore Memory service when deployed
@@ -175,8 +171,6 @@ def handle_chat(payload: dict) -> dict:
             "success": True,
             "session_id": session_id,
             "actor_id": actor_id,
-            "is_new_session": is_new_session,
-            "is_new_actor": is_new_actor,
             "response": response_text,
         }
 
