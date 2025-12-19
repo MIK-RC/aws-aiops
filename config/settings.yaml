@@ -9,15 +9,15 @@ aws:
 
 session:
   # Memory backend: "agentcore", "s3", "file", or "auto"
-  # - "agentcore": Use AgentCore Memory service (requires AGENTCORE_MEMORY_ID env var)
+  # - "agentcore": Use AgentCore Memory service (recommended for production)
   # - "s3": Use S3 for session storage
   # - "file": Use local file storage (for development only)
   # - "auto": Auto-detect (use AgentCore if running in AgentCore, else file)
-  backend: "auto"
+  backend: "agentcore"
 
   # AgentCore Memory ID (can also be set via AGENTCORE_MEMORY_ID env var)
-  # This is required when backend is "agentcore" or when running in AgentCore
-  # memory_id: "your-memory-id-here"
+  # This is required when backend is "agentcore"
+  memory_id: "aiopsagentcoreapp_mem-c1kjyYCCSX"
 
   # Local storage directory for file-based sessions (development only)
   local_storage_dir: "./sessions"

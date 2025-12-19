@@ -125,9 +125,12 @@ def create_agentcore_session_manager(
                 f"AgentCore Memory SDK not available, falling back to file storage: {e}"
             )
         except Exception as e:
+            # Log the full error for debugging in production
+            import traceback
             logger.error(
-                f"Failed to create AgentCore Memory session manager, "
-                f"falling back to file storage: {e}"
+                f"Failed to create AgentCore Memory session manager: {e}\n"
+                f"Traceback: {traceback.format_exc()}\n"
+                f"Falling back to file storage (WARNING: will not persist across invocations!)"
             )
 
     # Fallback to file-based session manager for local development
