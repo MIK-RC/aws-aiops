@@ -4,13 +4,17 @@ Memory Module
 Session management and conversation history for the AIOps Multi-Agent System.
 """
 
+from .agentcore_session_manager import (
+    create_agentcore_session_manager,
+    is_running_in_agentcore,
+)
+from .conversation_history import (
+    ConversationEntry,
+    ConversationHistory,
+)
 from .session_manager import (
     SessionManagerFactory,
     get_session_manager,
-)
-from .conversation_history import (
-    ConversationHistory,
-    ConversationEntry,
 )
 
 __all__ = [
@@ -18,4 +22,6 @@ __all__ = [
     "get_session_manager",
     "ConversationHistory",
     "ConversationEntry",
+    "create_agentcore_session_manager",
+    "is_running_in_agentcore",
 ]

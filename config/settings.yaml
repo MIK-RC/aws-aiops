@@ -8,9 +8,23 @@ aws:
   bedrock_endpoint: null
 
 session:
+  # Memory backend: "agentcore", "s3", "file", or "auto"
+  # - "agentcore": Use AgentCore Memory service (requires AGENTCORE_MEMORY_ID env var)
+  # - "s3": Use S3 for session storage
+  # - "file": Use local file storage (for development only)
+  # - "auto": Auto-detect (use AgentCore if running in AgentCore, else file)
+  backend: "auto"
+
+  # AgentCore Memory ID (can also be set via AGENTCORE_MEMORY_ID env var)
+  # This is required when backend is "agentcore" or when running in AgentCore
+  # memory_id: "your-memory-id-here"
+
+  # Local storage directory for file-based sessions (development only)
+  local_storage_dir: "./sessions"
+
   # Session TTL in seconds (7 days = 604800)
-  # AgentCore Memory service handles persistence automatically when deployed
   ttl_seconds: 604800
+
   # Maximum conversation history to retain per session
   max_history_length: 50
 

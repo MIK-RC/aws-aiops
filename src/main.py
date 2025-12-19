@@ -119,10 +119,12 @@ def handle_chat(payload: dict) -> dict:
     Handle interactive chat mode with session support.
 
     Uses the OrchestratorAgent for multi-turn conversations.
-    AgentCore handles session persistence automatically.
+    When deployed on AgentCore with memory configured, conversation
+    history is persisted via the AgentCore Memory service.
     """
     message = payload.get("message", "")
     session_id = payload.get("session_id")
+    actor_id = payload.get("actor_id")
 
     if not message:
         return {"success": False, "error": "Missing 'message' in payload"}
@@ -136,9 +138,13 @@ def handle_chat(payload: dict) -> dict:
     else:
         logger.info(f"Continuing chat session: {session_id}")
 
-    # Create orchestrator with session
-    # AgentCore handles session persistence via its Memory service
-    orchestrator = OrchestratorAgent(session_id=session_id)
+    # Create orchestrator with session and memory enabled
+    # Memory persistence is handled via AgentCore Memory service when deployed
+    orchestrator = OrchestratorAgent(
+        session_id=session_id,
+        enable_memory=True,
+        actor_id=actor_id,
+    )
 
     # Invoke the orchestrator with the user message
     logger.info(f"Processing chat message: {message[:100]}...")
