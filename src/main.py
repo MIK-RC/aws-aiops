@@ -139,26 +139,25 @@ def handle_chat(payload: dict) -> dict:
     history is persisted via the AgentCore Memory service.
     """
     message = payload.get("message", "")
-    user_id = payload.get("user_id")  # Single ID for both session and actor
+    session_id = payload.get("session_id")  # Single ID for both session and actor
 
     if not message:
         return {"success": False, "error": "Missing 'message' in payload"}
 
-    # Use user_id for BOTH session_id and actor_id (Option B from docs)
+    # Use session_id for BOTH session_id and actor_id (Option B from docs)
     # This ensures consistent memory lookup across invocations
-    # The client MUST provide user_id for memory to persist
-    if not user_id:
-        user_id = str(uuid.uuid4())
+    # The client MUST provide session_id for memory to persist
+    if not session_id:
+        session_id = str(uuid.uuid4())
         logger.warning(
-            f"No user_id provided - generated new one: {user_id}. "
-            f"Memory will NOT persist unless client sends this user_id in future requests!"
+            f"No session_id provided - generated new one: {session_id}. "
+            f"Memory will NOT persist unless client sends this session_id in future requests!"
         )
     else:
-        logger.info(f"Using provided user_id: {user_id}")
+        logger.info(f"Using provided session_id: {session_id}")
 
     # Use same ID for both session and actor (per AWS docs best practice)
-    session_id = user_id
-    actor_id = user_id
+    actor_id = session_id
     logger.info(f"Memory lookup key: session_id={session_id}, actor_id={actor_id}")
 
     # Create orchestrator with session and memory enabled
@@ -180,7 +179,7 @@ def handle_chat(payload: dict) -> dict:
 
         return {
             "success": True,
-            "user_id": user_id,  # Client must send this back for memory to work
+            "session_id": session_id,  # Client must send this back for memory to work
             "response": response_text,
         }
 
@@ -188,7 +187,7 @@ def handle_chat(payload: dict) -> dict:
         logger.error(f"Chat invocation failed: {e}")
         return {
             "success": False,
-            "user_id": user_id,
+            "session_id": session_id,
             "error": str(e),
         }
 
