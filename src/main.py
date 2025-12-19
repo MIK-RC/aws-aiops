@@ -13,7 +13,6 @@ import uuid
 from pathlib import Path
 
 from bedrock_agentcore import BedrockAgentCoreApp
-from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 from dotenv import load_dotenv
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
