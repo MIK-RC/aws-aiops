@@ -5,6 +5,7 @@ Provides the BaseAgent class that all specialized agents inherit from.
 Contains shared functionality for initialization, logging, and action tracking.
 """
 
+import time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
@@ -253,8 +254,6 @@ class BaseAgent(ABC):
         Returns:
             The agent's response as a string.
         """
-        import time
-
         start_time = time.time()
 
         self._logger.info(f"Invoking agent with message: {message[:100]}...")
@@ -304,7 +303,6 @@ class BaseAgent(ABC):
             The agent's response as a string.
         """
         # Strands SDK supports async via the agent's async methods
-        import time
 
         start_time = time.time()
 

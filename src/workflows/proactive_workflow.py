@@ -5,6 +5,8 @@ Implements the proactive analysis workflow that runs as an ECS task.
 Uses ThreadPoolExecutor for parallel processing and Swarm for agent coordination.
 """
 
+import re
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -77,7 +79,6 @@ class ProactiveWorkflow:
         Returns:
             Dictionary containing the complete workflow report.
         """
-        import sys
 
         self._start_time = datetime.now(UTC)
         logger.info("=" * 50)
@@ -284,14 +285,12 @@ Service name: {service_name}
 
     def _extract_ticket_number(self, output: str) -> str | None:
         """Extract ticket number from Swarm output."""
-        import re
 
         match = re.search(r"INC\d+", output)
         return match.group(0) if match else None
 
     def _extract_s3_uri(self, output: str) -> str | None:
         """Extract S3 URI from Swarm output."""
-        import re
 
         match = re.search(r"s3://[^\s]+", output)
         return match.group(0) if match else None

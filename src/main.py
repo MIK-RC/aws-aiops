@@ -8,6 +8,7 @@ Manages scaling, invocations, and health checks automatically.
 import json
 import sys
 import threading
+import traceback
 import uuid
 from pathlib import Path
 
@@ -91,7 +92,6 @@ def invoke(payload: dict) -> dict:
 
 def handle_proactive(payload: dict) -> dict:
     """Handle proactive workflow mode - starts in background, returns immediately."""
-    import sys
 
     task_id = app.add_async_task("proactive_workflow")
     logger.info(f"Starting proactive workflow in background (task_id: {task_id})")
@@ -104,13 +104,12 @@ def handle_proactive(payload: dict) -> dict:
 
             result = run_proactive_workflow()
 
-            logger.info(f"=== PROACTIVE WORKFLOW COMPLETED ===")
+            logger.info("=== PROACTIVE WORKFLOW COMPLETED ===")
             logger.info(f"Workflow result: {json.dumps(result, default=str)[:1000]}")
             sys.stdout.flush()
 
         except Exception as e:
-            import traceback
-            logger.error(f"=== PROACTIVE WORKFLOW FAILED ===")
+            logger.error("=== PROACTIVE WORKFLOW FAILED ===")
             logger.error(f"Error: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             sys.stdout.flush()
@@ -207,10 +206,10 @@ def handle_swarm(payload: dict) -> dict:
     return result.to_dict()
 
 
-@app.ping
-def health() -> dict:
-    """Health check endpoint for AgentCore (GET /ping)."""
-    return {"status": "healthy", "service": "aiops-proactive-workflow"}
+# @app.ping
+# def health() -> dict:
+#     """Health check endpoint for AgentCore (GET /ping)."""
+#     return {"status": "healthy", "service": "aiops-proactive-workflow"}
 
 
 # Start the AgentCore server when executed directly

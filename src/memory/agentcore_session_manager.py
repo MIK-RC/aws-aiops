@@ -7,8 +7,17 @@ Strands integration.
 """
 
 import os
+import traceback
+import uuid as uuid_mod
 from typing import Any
 
+# Import AgentCore Memory session manager
+from bedrock_agentcore.memory.integrations.strands.config import (
+    AgentCoreMemoryConfig,
+)
+from bedrock_agentcore.memory.integrations.strands.session_manager import (
+    AgentCoreMemorySessionManager,
+)
 from strands.session import FileSessionManager
 
 from ..utils.config_loader import load_settings
@@ -73,9 +82,7 @@ def create_agentcore_session_manager(
 
     # Resolve memory_id from parameter, env var, or config
     resolved_memory_id = (
-        memory_id
-        or os.environ.get("AGENTCORE_MEMORY_ID")
-        or session_config.get("memory_id")
+        memory_id or os.environ.get("AGENTCORE_MEMORY_ID") or session_config.get("memory_id")
     )
 
     # Resolve region
@@ -83,7 +90,6 @@ def create_agentcore_session_manager(
 
     # Resolve actor_id (generate unique ID if not specified)
     if not actor_id:
-        import uuid as uuid_mod
         resolved_actor_id = f"user-{uuid_mod.uuid4().hex[:12]}"
         logger.info(f"Generated actor_id: {resolved_actor_id}")
     else:
@@ -96,14 +102,6 @@ def create_agentcore_session_manager(
 
     if use_agentcore and resolved_memory_id:
         try:
-            # Import AgentCore Memory session manager
-            from bedrock_agentcore.memory.integrations.strands.config import (
-                AgentCoreMemoryConfig,
-            )
-            from bedrock_agentcore.memory.integrations.strands.session_manager import (
-                AgentCoreMemorySessionManager,
-            )
-
             config = AgentCoreMemoryConfig(
                 memory_id=resolved_memory_id,
                 session_id=session_id,
@@ -121,12 +119,10 @@ def create_agentcore_session_manager(
             )
 
         except ImportError as e:
-            logger.warning(
-                f"AgentCore Memory SDK not available, falling back to file storage: {e}"
-            )
+            logger.warning(f"AgentCore Memory SDK not available, falling back to file storage: {e}")
         except Exception as e:
             # Log the full error for debugging in production
-            import traceback
+
             logger.error(
                 f"Failed to create AgentCore Memory session manager: {e}\n"
                 f"Traceback: {traceback.format_exc()}\n"
