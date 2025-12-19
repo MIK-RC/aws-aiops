@@ -231,6 +231,16 @@ s3:
     - Service reports: s3://bucket/{service-name}/{timestamp}.md
     - Summaries: s3://bucket/summaries/{date}/{timestamp}.md
 
+    ## Report Content Requirements:
+    When creating reports, ALWAYS include the following sections:
+    - **Service Name**: The service being analyzed
+    - **Severity**: The assessed severity level (critical/high/medium/low)
+    - **Analysis Summary**: Key findings from the error analysis
+    - **Error Patterns**: Identified error types and their frequency
+    - **Suggested Fixes**: Recommended solutions for each issue
+    - **ServiceNow Ticket**: If a ticket was created, include the ticket number (e.g., INC0012345)
+    - **Timestamp**: When the analysis was performed
+
     ## Tools Available:
     - upload_service_report: Upload a report for a specific service
     - upload_summary_report: Upload a summary report

@@ -227,7 +227,10 @@ Please:
 1. Identify error patterns and assess severity (critical/high/medium/low)
 2. Suggest fixes for the issues found
 3. If severity is medium or higher, create a ServiceNow ticket
-4. Upload a report to S3 with your analysis
+4. Upload a comprehensive report to S3 that includes:
+   - Your analysis and severity assessment
+   - Suggested fixes
+   - The ServiceNow ticket number (if one was created)
 
 Service name: {service_name}
 """
