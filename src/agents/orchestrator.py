@@ -5,9 +5,7 @@ Central coordinator agent that manages all specialist agents and user interactio
 Maintains conversation history and generates comprehensive reports.
 """
 
-from strands.session import FileSessionManager
-
-from ..utils.config_loader import load_settings
+from ..memory import create_agentcore_session_manager
 from ..utils.logging_config import get_logger
 from .base import BaseAgent
 from .coding_agent import CodingAgent
@@ -54,6 +52,8 @@ class OrchestratorAgent(BaseAgent):
         model_id: str | None = None,
         region: str | None = None,
         session_id: str | None = None,
+        enable_memory: bool = True,
+        actor_id: str | None = None,
     ):
         """
         Initialize the Orchestrator Agent.
@@ -63,11 +63,18 @@ class OrchestratorAgent(BaseAgent):
             region: Optional AWS region override.
             session_id: Session ID for conversation persistence.
                        When deployed on AgentCore, sessions are managed automatically.
+            enable_memory: Whether to enable memory persistence. Set to False for
+                          stateless operations like proactive workflows. Defaults to True.
+            actor_id: Optional actor ID for AgentCore Memory. Defaults to session_id.
         """
-        # Create session manager if session_id provided
+        # Create session manager if session_id provided AND memory is enabled
         session_manager = None
-        if session_id:
-            session_manager = self._create_session_manager(session_id=session_id)
+        if session_id and enable_memory:
+            session_manager = self._create_session_manager(
+                session_id=session_id,
+                actor_id=actor_id or session_id,
+                region=region,
+            )
 
         # Initialize specialist agents (lazy loaded)
         self._datadog_agent: DataDogAgent | None = None
@@ -85,17 +92,32 @@ class OrchestratorAgent(BaseAgent):
         )
 
     @staticmethod
-    def _create_session_manager(session_id: str):
+    def _create_session_manager(
+        session_id: str,
+        actor_id: str | None = None,
+        region: str | None = None,
+    ):
         """
         Create session manager for conversation persistence.
 
-        Uses file-based storage locally. When deployed on AgentCore,
-        the AgentCore Memory service handles persistence automatically.
+        When deployed on AgentCore with memory configured, uses AgentCore Memory
+        service for persistence across invocations.
+
+        Falls back to file-based storage for local development.
+
+        Args:
+            session_id: Unique identifier for the session.
+            actor_id: Optional actor ID for AgentCore Memory.
+            region: Optional AWS region override.
+
+        Returns:
+            A session manager instance.
         """
         _module_logger.info(f"Creating session manager for: {session_id}")
-        return FileSessionManager(
+        return create_agentcore_session_manager(
             session_id=session_id,
-            storage_dir="./sessions",
+            actor_id=actor_id,
+            region=region,
         )
 
     def get_tools(self) -> list:

@@ -8,10 +8,12 @@ Manages scaling, invocations, and health checks automatically.
 import json
 import sys
 import threading
+import traceback
 import uuid
 from pathlib import Path
 
 from bedrock_agentcore import BedrockAgentCoreApp
+from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
 from dotenv import load_dotenv
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
@@ -93,15 +95,28 @@ def handle_proactive(payload: dict) -> dict:
 
     task_id = app.add_async_task("proactive_workflow")
     logger.info(f"Starting proactive workflow in background (task_id: {task_id})")
+    sys.stdout.flush()  # Ensure log is written to CloudWatch
 
     def run_in_background():
         try:
+            logger.info("=== PROACTIVE WORKFLOW STARTED ===")
+            sys.stdout.flush()
+
             result = run_proactive_workflow()
-            logger.info(f"Workflow completed: {result}")
+
+            logger.info("=== PROACTIVE WORKFLOW COMPLETED ===")
+            logger.info(f"Workflow result: {json.dumps(result, default=str)[:1000]}")
+            sys.stdout.flush()
+
         except Exception as e:
-            logger.error(f"Workflow failed: {e}")
+            logger.error("=== PROACTIVE WORKFLOW FAILED ===")
+            logger.error(f"Error: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            sys.stdout.flush()
+
         finally:
             app.complete_async_task(task_id)
+            sys.stdout.flush()
 
     thread = threading.Thread(target=run_in_background, daemon=True)
     thread.start()
@@ -119,26 +134,38 @@ def handle_chat(payload: dict) -> dict:
     Handle interactive chat mode with session support.
 
     Uses the OrchestratorAgent for multi-turn conversations.
-    AgentCore handles session persistence automatically.
+    When deployed on AgentCore with memory configured, conversation
+    history is persisted via the AgentCore Memory service.
     """
     message = payload.get("message", "")
-    session_id = payload.get("session_id")
+    session_id = payload.get("session_id")  # Single ID for both session and actor
 
     if not message:
         return {"success": False, "error": "Missing 'message' in payload"}
 
-    # Generate session_id if not provided (first interaction)
-    is_new_session = False
+    # Use session_id for BOTH session_id and actor_id (Option B from docs)
+    # This ensures consistent memory lookup across invocations
+    # The client MUST provide session_id for memory to persist
     if not session_id:
         session_id = str(uuid.uuid4())
-        is_new_session = True
-        logger.info(f"New chat session created: {session_id}")
+        logger.warning(
+            f"No session_id provided - generated new one: {session_id}. "
+            f"Memory will NOT persist unless client sends this session_id in future requests!"
+        )
     else:
-        logger.info(f"Continuing chat session: {session_id}")
+        logger.info(f"Using provided session_id: {session_id}")
 
-    # Create orchestrator with session
-    # AgentCore handles session persistence via its Memory service
-    orchestrator = OrchestratorAgent(session_id=session_id)
+    # Use same ID for both session and actor (per AWS docs best practice)
+    actor_id = session_id
+    logger.info(f"Memory lookup key: session_id={session_id}, actor_id={actor_id}")
+
+    # Create orchestrator with session and memory enabled
+    # Memory persistence is handled via AgentCore Memory service when deployed
+    orchestrator = OrchestratorAgent(
+        session_id=session_id,
+        enable_memory=True,
+        actor_id=actor_id,
+    )
 
     # Invoke the orchestrator with the user message
     logger.info(f"Processing chat message: {message[:100]}...")
@@ -151,8 +178,7 @@ def handle_chat(payload: dict) -> dict:
 
         return {
             "success": True,
-            "session_id": session_id,
-            "is_new_session": is_new_session,
+            "session_id": session_id,  # Client must send this back for memory to work
             "response": response_text,
         }
 
@@ -180,10 +206,10 @@ def handle_swarm(payload: dict) -> dict:
     return result.to_dict()
 
 
-@app.ping
-def health() -> dict:
-    """Health check endpoint for AgentCore (GET /ping)."""
-    return {"status": "healthy", "service": "aiops-proactive-workflow"}
+# @app.ping
+# def health() -> dict:
+#     """Health check endpoint for AgentCore (GET /ping)."""
+#     return {"status": "healthy", "service": "aiops-proactive-workflow"}
 
 
 # Start the AgentCore server when executed directly

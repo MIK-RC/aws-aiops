@@ -5,6 +5,8 @@ Implements the proactive analysis workflow that runs as an ECS task.
 Uses ThreadPoolExecutor for parallel processing and Swarm for agent coordination.
 """
 
+import re
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -77,8 +79,14 @@ class ProactiveWorkflow:
         Returns:
             Dictionary containing the complete workflow report.
         """
+
         self._start_time = datetime.now(UTC)
-        logger.info("Starting proactive workflow")
+        logger.info("=" * 50)
+        logger.info("PROACTIVE WORKFLOW RUN STARTING")
+        logger.info(f"Time range: {self._time_from} to {self._time_to}")
+        logger.info(f"Max workers: {self._max_workers}")
+        logger.info("=" * 50)
+        sys.stdout.flush()
 
         try:
             # Step 1: Fetch all logs and identify affected services
@@ -220,7 +228,10 @@ Please:
 1. Identify error patterns and assess severity (critical/high/medium/low)
 2. Suggest fixes for the issues found
 3. If severity is medium or higher, create a ServiceNow ticket
-4. Upload a report to S3 with your analysis
+4. Upload a comprehensive report to S3 that includes:
+   - Your analysis and severity assessment
+   - Suggested fixes
+   - The ServiceNow ticket number (if one was created)
 
 Service name: {service_name}
 """
@@ -274,14 +285,12 @@ Service name: {service_name}
 
     def _extract_ticket_number(self, output: str) -> str | None:
         """Extract ticket number from Swarm output."""
-        import re
 
         match = re.search(r"INC\d+", output)
         return match.group(0) if match else None
 
     def _extract_s3_uri(self, output: str) -> str | None:
         """Extract S3 URI from Swarm output."""
-        import re
 
         match = re.search(r"s3://[^\s]+", output)
         return match.group(0) if match else None
