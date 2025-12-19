@@ -138,6 +138,14 @@ def handle_chat(payload: dict) -> dict:
     else:
         logger.info(f"Continuing chat session: {session_id}")
 
+    # Generate actor_id if not provided
+    # Actor ID identifies the user/entity in AgentCore Memory
+    is_new_actor = False
+    if not actor_id:
+        actor_id = f"user-{uuid.uuid4().hex[:12]}"
+        is_new_actor = True
+        logger.info(f"New actor created: {actor_id}")
+
     # Create orchestrator with session and memory enabled
     # Memory persistence is handled via AgentCore Memory service when deployed
     orchestrator = OrchestratorAgent(
@@ -158,7 +166,9 @@ def handle_chat(payload: dict) -> dict:
         return {
             "success": True,
             "session_id": session_id,
+            "actor_id": actor_id,
             "is_new_session": is_new_session,
+            "is_new_actor": is_new_actor,
             "response": response_text,
         }
 
@@ -167,6 +177,7 @@ def handle_chat(payload: dict) -> dict:
         return {
             "success": False,
             "session_id": session_id,
+            "actor_id": actor_id,
             "error": str(e),
         }
 
