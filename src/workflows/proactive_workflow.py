@@ -77,8 +77,15 @@ class ProactiveWorkflow:
         Returns:
             Dictionary containing the complete workflow report.
         """
+        import sys
+
         self._start_time = datetime.now(UTC)
-        logger.info("Starting proactive workflow")
+        logger.info("=" * 50)
+        logger.info("PROACTIVE WORKFLOW RUN STARTING")
+        logger.info(f"Time range: {self._time_from} to {self._time_to}")
+        logger.info(f"Max workers: {self._max_workers}")
+        logger.info("=" * 50)
+        sys.stdout.flush()
 
         try:
             # Step 1: Fetch all logs and identify affected services

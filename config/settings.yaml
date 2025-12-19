@@ -31,8 +31,8 @@ session:
 logging:
   level: "INFO"
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-  # Enable JSON logging for production
-  json_format: false
+  # Enable JSON logging for production (easier to parse in CloudWatch)
+  json_format: true
 
 # Workflow settings
 workflow:
