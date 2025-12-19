@@ -146,14 +146,13 @@ def handle_chat(payload: dict) -> dict:
     else:
         logger.info(f"Continuing chat session: {session_id}")
 
-    # Use actor_id from payload, or default to session_id for consistency
+    # Generate actor_id if not provided
     # Actor ID identifies the user/entity in AgentCore Memory
-    # Using session_id as default ensures messages are found across invocations
     is_new_actor = False
     if not actor_id:
-        actor_id = session_id  # Use session_id as actor_id for consistent lookup
-        is_new_actor = is_new_session
-        logger.info(f"Using session_id as actor_id: {actor_id}")
+        actor_id = f"user-{uuid.uuid4().hex[:12]}"
+        is_new_actor = True
+        logger.info(f"New actor created: {actor_id}")
 
     # Create orchestrator with session and memory enabled
     # Memory persistence is handled via AgentCore Memory service when deployed
