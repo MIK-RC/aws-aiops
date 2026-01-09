@@ -14,18 +14,17 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load .env credentials
 load_dotenv()
 
-PORT = 9000
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+}
+PORT = 8000
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION")
 AGENTCORE_AGENT_RUNTIME_ARN = os.environ.get(
     "AGENTCORE_AGENT_RUNTIME_ARN"
 )  # Get from AgentCore UI on AWS.
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-)
 
 # Setting up middleware
 app.add_middleware(
@@ -60,6 +59,7 @@ async def invoke_agent(request: Request):
     return Response(
         content=result,
         status_code=200,
+        headers=CORS_HEADERS,
         media_type="application/json",
     )
 
