@@ -14,7 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load .env credentials
 load_dotenv()
 
-# Setting env variables
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+}
 PORT = 8000
 AWS_REGION = os.environ.get("AWS_DEFAULT_REGION")
 AGENTCORE_AGENT_RUNTIME_ARN = os.environ.get(
@@ -22,12 +26,12 @@ AGENTCORE_AGENT_RUNTIME_ARN = os.environ.get(
 )  # Get from AgentCore UI on AWS.
 app = FastAPI()
 
-# Setting up CORS Middelware
+# Setting up middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_origins=CORS_HEADERS.get("Access-Control-Allow-Origin", ""),
+    allow_methods=CORS_HEADERS.get("Access-Control-Allow-Methods", ""),
+    allow_headers=CORS_HEADERS.get("Access-Control-Allow-Headers", ""),
 )
 
 
