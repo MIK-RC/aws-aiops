@@ -30,7 +30,7 @@ app = FastAPI()
 @app.post("/invoke")
 async def invoke_agent(request: Request):
     """
-    Mirrors lambda_handler POST logic exactly
+    Invoke Agent on AWS AgentCore using boto3 client.
     """
     body = await request.json()
 
@@ -58,9 +58,9 @@ async def invoke_agent(request: Request):
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app:app",  # module_name:app_instance
+        "app:app",
         host="0.0.0.0",
         port=PORT,
-        reload=False,  # reload=True breaks when run this way
+        reload=False,
         log_level="info",
     )
