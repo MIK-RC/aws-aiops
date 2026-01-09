@@ -1,6 +1,5 @@
 """
-Primary FastAPI Application to invoke AWS AgentCore Application deployed on AWS. Uses
-
+Primary FastAPI Application to invoke AWS AgentCore Application deployed on AWS.
 """
 
 import json
