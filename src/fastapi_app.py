@@ -1,6 +1,5 @@
 """
-Primary FastAPI Application to invoke AWS AgentCore Application deployed on AWS. Uses
-
+Primary FastAPI Application to invoke AWS AgentCore Application deployed on AWS.
 """
 
 import json
@@ -26,6 +25,14 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
+)
+
+# Setting up middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_HEADERS.get("Access-Control-Allow-Origin", ""),
+    allow_methods=CORS_HEADERS.get("Access-Control-Allow-Methods", ""),
+    allow_headers=CORS_HEADERS.get("Access-Control-Allow-Headers", ""),
 )
 
 
