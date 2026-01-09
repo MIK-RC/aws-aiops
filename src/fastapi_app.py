@@ -1,3 +1,8 @@
+"""
+Primary FastAPI Application to invoke AWS AgentCore Application deployed on AWS. Uses
+
+"""
+
 import json
 import os
 
@@ -15,7 +20,10 @@ CORS_HEADERS = {
     "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
 }
 PORT = 8000
-
+AWS_REGION = os.environ.get("AWS_DEFAULT_REGION")
+AGENTCORE_AGENT_RUNTIME_ARN = os.environ.get(
+    "AGENTCORE_AGENT_RUNTIME_ARN"
+)  # Get from AgentCore UI on AWS.
 app = FastAPI()
 
 
@@ -28,11 +36,11 @@ async def invoke_agent(request: Request):
 
     client = boto3.client(
         "bedrock-agentcore",
-        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+        region_name=AWS_REGION,
     )
 
     response = client.invoke_agent_runtime(
-        agentRuntimeArn=os.environ.get("AGENTCORE_AGENT_RUNTIME_ARN"),
+        agentRuntimeArn=AGENTCORE_AGENT_RUNTIME_ARN,
         contentType="application/json",
         accept="application/json",
         payload=json.dumps(body).encode("utf-8"),
