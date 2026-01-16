@@ -11,6 +11,15 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from utils.env_bootstrap import bootstrap_env_from_json
+
+bootstrap_env_from_json(
+    json_filename="creds.json",
+    env_filename=".env",
+    overwrite=False,
+    verbose=True,
+)
+
 # Load .env credentials
 load_dotenv()
 
