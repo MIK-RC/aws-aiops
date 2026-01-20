@@ -75,7 +75,7 @@ async def invoke_agent(request: Request):
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app:app",
+        "fastapi_app:app",
         host="0.0.0.0",
         port=PORT,
         reload=False,
