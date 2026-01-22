@@ -130,14 +130,10 @@ class OrchestratorAgent(BaseAgent):
         # Import here to avoid circular dependency
         from ..tools.code_analysis_tools import analyze_error_patterns
         from ..tools.datadog_tools import query_logs
-        from ..tools.servicenow_tools import create_incident
+        from ..tools.servicenow_tools import create_incident, search_incidents
 
         # The orchestrator can access high-level tools from all agents
-        return [
-            query_logs,
-            analyze_error_patterns,
-            create_incident,
-        ]
+        return [query_logs, analyze_error_patterns, create_incident, search_incidents]
 
     # ==========================================
     # Specialist Agent Access
@@ -176,23 +172,24 @@ class OrchestratorAgent(BaseAgent):
         create_tickets: bool = True,
     ) -> dict:
         """
-        Complete workflow: fetch logs, analyze, and create tickets.
+        Complete workflow: fetch logs, check KB, analyze, create tickets, and generate report.
 
-        This method orchestrates the full AIOps workflow:
-        1. Fetch error/warning logs from DataDog
-        2. Identify affected services
-        3. Analyze errors with the Coding Agent
-        4. Create tickets for issues via ServiceNow Agent
-        5. Generate comprehensive report
+        Workflow:
+            1. Fetch error/warning logs from DataDog
+            2. Identify affected services
+            3. Pre-analysis KB check in ServiceNow (resolved tickets)
+            4. Analyze logs with Coding Agent only for new/unresolved issues
+            5. Deduplicate and create tickets via ServiceNow Agent (decision mode)
+            6. Generate comprehensive report
 
         Args:
-            user_request: The user's request or context.
+            user_request: User's request or description of the issue.
             time_from: Start time for log query.
             time_to: End time for log query.
-            create_tickets: Whether to create ServiceNow tickets.
+            create_tickets: Whether to create ServiceNow tickets for new issues.
 
         Returns:
-            Complete workflow report.
+            Complete workflow result including analysis, tickets, and summary.
         """
         self._logger.info(f"Starting full analysis workflow for: {user_request[:100]}")
         self._agent_reports = []
@@ -205,12 +202,11 @@ class OrchestratorAgent(BaseAgent):
             "summary": "",
         }
 
-        # Stage 1: Fetch logs from DataDog
+        # =========================
+        # Stage 1: Fetch logs
+        # =========================
         self._logger.info("Stage 1: Fetching logs from DataDog")
-        logs = self.datadog_agent.fetch_logs(
-            time_from=time_from,
-            time_to=time_to,
-        )
+        logs = self.datadog_agent.fetch_logs(time_from=time_from, time_to=time_to)
         services = self.datadog_agent.get_services(logs)
 
         workflow_result["stages"]["datadog"] = {
@@ -230,11 +226,50 @@ class OrchestratorAgent(BaseAgent):
             workflow_result["summary"] = "No error/warning logs found in the specified time range."
             return workflow_result
 
-        # Stage 2: Analyze each service's logs
-        self._logger.info("Stage 2: Analyzing logs with Coding Agent")
-        analysis_results = {}
-
+        # =========================
+        # Stage 2: Pre-analysis KB check (ServiceNow)
+        # =========================
+        self._logger.info("Stage 2: Pre-analysis KB check in ServiceNow")
+        services_to_analyze = []
         for service in services:
+            kb_results = self.servicenow_agent.search_incidents(
+                query=user_request,
+                service_name=service,
+                mode="knowledge",
+                limit=5,
+            )
+
+            if kb_results:
+                workflow_result["tickets_created"].append(
+                    {
+                        "service": service,
+                        "ticket_number": [t.get("number") for t in kb_results],
+                        "priority": "N/A",
+                        "note": "Resolved ticket(s) found — analysis skipped",
+                    }
+                )
+                self._agent_reports.append(
+                    {
+                        "agent": "ServiceNow Agent",
+                        "action": f"KB check for {service}",
+                        "result": f"{len(kb_results)} resolved tickets found, skipping analysis",
+                    }
+                )
+            else:
+                services_to_analyze.append(service)
+
+        if not services_to_analyze:
+            workflow_result["summary"] = (
+                "All issues matched resolved KB tickets; no new analysis required."
+            )
+            return workflow_result
+
+        # =========================
+        # Stage 3: Analyze logs (Coding Agent)
+        # =========================
+        self._logger.info("Stage 3: Analyzing logs with Coding Agent")
+        analysis_results = {}
+        for service in services_to_analyze:
             formatted_logs = self.datadog_agent.format_logs(logs, service=service)
             analysis = self.coding_agent.full_analysis(formatted_logs, service_name=service)
             analysis_results[service] = analysis
@@ -250,17 +285,42 @@ class OrchestratorAgent(BaseAgent):
 
         workflow_result["stages"]["analysis"] = analysis_results
 
-        # Stage 3: Create tickets for significant issues
+        # =========================
+        # Stage 4: Deduplicate & create tickets (ServiceNow Agent)
+        # =========================
         if create_tickets:
-            self._logger.info("Stage 3: Creating ServiceNow tickets")
-
+            self._logger.info("Stage 4: Deduplicating and creating ServiceNow tickets")
             for service, analysis in analysis_results.items():
                 severity = analysis.get("severity", {}).get("severity", "low")
+                if severity not in ("critical", "high", "medium"):
+                    continue  # skip low severity
 
-                # Only create tickets for medium severity or higher
-                if severity in ("critical", "high", "medium"):
+                # Search for active tickets to prevent duplicates
+                existing_tickets = self.servicenow_agent.search_incidents(
+                    query=user_request,
+                    service_name=service,
+                    mode="decision",
+                    limit=5,
+                )
+
+                if existing_tickets:
+                    workflow_result["tickets_created"].append(
+                        {
+                            "service": service,
+                            "ticket_number": [t.get("number") for t in existing_tickets],
+                            "priority": severity,
+                            "note": "Duplicate ticket exists — not creating a new one",
+                        }
+                    )
+                    self._agent_reports.append(
+                        {
+                            "agent": "ServiceNow Agent",
+                            "action": f"Duplicate check for {service}",
+                            "result": f"{len(existing_tickets)} active ticket(s) found",
+                        }
+                    )
+                else:
                     formatted_logs = self.datadog_agent.format_logs(logs, service=service)
-
                     ticket = self.servicenow_agent.create_ticket_from_analysis(
                         service_name=service,
                         analysis_report=analysis,
@@ -268,27 +328,29 @@ class OrchestratorAgent(BaseAgent):
                         log_context=formatted_logs,
                     )
 
-                    if "error" not in ticket:
-                        workflow_result["tickets_created"].append(
-                            {
-                                "service": service,
-                                "ticket_number": ticket.get("number"),
-                                "priority": severity,
-                            }
-                        )
+                    workflow_result["tickets_created"].append(
+                        {
+                            "service": service,
+                            "ticket_number": ticket.get("number"),
+                            "priority": severity,
+                        }
+                    )
+                    self._agent_reports.append(
+                        {
+                            "agent": "ServiceNow Agent",
+                            "action": f"Created ticket for {service}",
+                            "result": f"Ticket: {ticket.get('number', 'N/A')}",
+                        }
+                    )
 
-                        self._agent_reports.append(
-                            {
-                                "agent": "ServiceNow Agent",
-                                "action": f"Created ticket for {service}",
-                                "result": f"Ticket: {ticket.get('number', 'N/A')}",
-                            }
-                        )
-
-        # Generate summary
+        # =========================
+        # Stage 5: Generate summary
+        # =========================
         workflow_result["summary"] = self._generate_workflow_summary(workflow_result)
 
-        # Record orchestrator action
+        # =========================
+        # Stage 6: Record orchestrator action
+        # =========================
         self.record_action(
             action_type="full_workflow",
             description="Completed full analysis workflow",

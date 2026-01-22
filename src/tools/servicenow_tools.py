@@ -262,6 +262,126 @@ class ServiceNowClient:
             logger.error(f"ServiceNow get failed: {e}")
             return {"error": str(e)}
 
+    def search_incidents(
+        self,
+        text: str | None = None,
+        states: list[str] | None = None,
+        limit: int | None = None,
+        mode: str = "decision",
+        raw_query: str | None = None,
+    ) -> list[dict]:
+        """
+        Search incidents in ServiceNow.
+
+        Supports structured search with optional OR-based text matching,
+        state filtering, ordering by most recent update, and result limiting.
+
+        Args:
+            text: Free-text to search across configured fields.
+            states: List of incident states to filter on (display values).
+            limit: Max number of results to return.
+            mode: "decision" (deduplication) or "knowledge" (resolution lookup).
+            raw_query: Optional raw sysparm_query string (takes precedence).
+
+        Returns:
+            List of incident records (shape depends on mode).
+        """
+        if not self.base_url:
+            logger.error("ServiceNow instance not configured")
+            return [{"error": "ServiceNow instance not configured"}]
+
+        search_cfg = self._config.get("search", {})
+        endpoint = self._config.get("endpoints", {}).get("incidents", "/api/now/table/incident")
+
+        url = f"{self.base_url}{endpoint}"
+
+        limit = limit or search_cfg.get("default_limit", 5)
+        order = search_cfg.get("default_order", "ORDERBYDESCsys_updated_on")
+
+        # Determine default states by mode if not provided
+        if not states:
+            states = search_cfg.get("default_states", {}).get(mode, [])
+
+        query_parts: list[str] = []
+
+        # Raw query takes precedence
+        if raw_query:
+            query = raw_query
+        else:
+            # Text search (OR across fields)
+            if text:
+                fields = search_cfg.get(
+                    "searchable_fields",
+                    ["short_description", "description", "close_notes"],
+                )
+                text_query = "^OR".join(f"{field}LIKE{text}" for field in fields)
+                query_parts.append(f"({text_query})")
+
+            # State filters
+            if states:
+                state_query = "^OR".join(f"state={state}" for state in states)
+                query_parts.append(f"({state_query})")
+
+            query = "^".join(query_parts) if query_parts else ""
+
+        # Always apply ordering
+        if query:
+            query = f"{query}^{order}"
+        else:
+            query = order
+
+        params = {
+            "sysparm_query": query,
+            "sysparm_limit": limit,
+        }
+
+        logger.info(f"Searching ServiceNow incidents (mode={mode}, limit={limit})")
+
+        try:
+            response = requests.get(
+                url,
+                auth=self.auth,
+                headers=self.headers,
+                params=params,
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+
+            results = response.json().get("result", [])
+
+            # Shape results by mode
+            if mode == "knowledge":
+                return [
+                    {
+                        "sys_id": r.get("sys_id"),
+                        "number": r.get("number"),
+                        "state": r.get("state"),
+                        "priority": r.get("priority"),
+                        "short_description": r.get("short_description"),
+                        "description": r.get("description"),
+                        "close_notes": r.get("close_notes"),
+                        "updated_on": r.get("sys_updated_on"),
+                    }
+                    for r in results
+                ]
+
+            # decision mode (default)
+            return [
+                {
+                    "sys_id": r.get("sys_id"),
+                    "number": r.get("number"),
+                    "state": r.get("state"),
+                    "priority": r.get("priority"),
+                    "short_description": r.get("short_description"),
+                    "updated_on": r.get("sys_updated_on"),
+                }
+                for r in results
+            ]
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"ServiceNow search failed: {e}")
+            return [{"error": str(e)}]
+
 
 # Create a default client instance for tool functions
 _default_client: ServiceNowClient | None = None
@@ -416,4 +536,55 @@ def get_incident_status(incident_id: str) -> dict:
         "short_description": result.get("short_description"),
         "created_on": result.get("sys_created_on"),
         "updated_on": result.get("sys_updated_on"),
+    }
+
+
+@tool
+def search_incidents(
+    text: str = "",
+    states: list[str] | None = None,
+    limit: int = 0,
+    mode: str = "decision",
+    raw_query: str = "",
+) -> dict:
+    """
+    Search for incidents in ServiceNow.
+
+    This tool is used for:
+    - Deduplication before creating new incidents (mode="decision")
+    - Knowledge base lookups using resolved/closed incidents (mode="knowledge")
+
+    Args:
+        text: Free-text query to search incident fields.
+        states: Optional list of incident states to filter by.
+        limit: Maximum number of incidents to return.
+               Defaults to config value (typically 5).
+        mode: Search mode.
+              - "decision": lightweight results for deduplication
+              - "knowledge": enriched results for resolution lookup
+        raw_query: Optional raw ServiceNow sysparm_query string.
+                   If provided, structured fields are ignored.
+
+    Returns:
+        Dictionary containing:
+        - count: Number of matching incidents
+        - results: List of matching incident summaries
+        - Or error details
+    """
+    client = _get_client()
+
+    results = client.search_incidents(
+        text=text or None,
+        states=states,
+        limit=limit or None,
+        mode=mode,
+        raw_query=raw_query or None,
+    )
+
+    if results and "error" in results[0]:
+        return results[0]
+
+    return {
+        "count": len(results),
+        "results": results,
     }
