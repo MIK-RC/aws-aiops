@@ -107,24 +107,42 @@ class AIOpsSwarm:
     def s3_agent(self) -> S3Agent | None:
         return self._s3_agent
 
-    def run(self, task: str, start_agent: str | None = None) -> "SwarmResult":
+    def run(
+        self, task: str, start_agent: str | None = None, precheck_servicenow: bool = True
+    ) -> "SwarmResult":
         """
-        Run a task through the swarm.
+        Run a task through the swarm with optional ServiceNow pre-check.
 
         Args:
             task: Task description for the swarm.
             start_agent: Optional agent name to start with.
+            precheck_servicenow: If True, ServiceNow searches for resolved tickets
+                                before invoking CodingAgent.
 
         Returns:
             SwarmResult with execution details.
         """
         logger.info(f"Starting swarm task: {task[:100]}...")
 
-        if start_agent is None:
-            start_agent = self._coding_agent.agent_name
-
         try:
-            result = self._swarm(task, start=start_agent)
+            # Determine starting agent
+            if precheck_servicenow and self._servicenow_agent:
+                # Start with ServiceNow for ticket knowledge-base check
+                start_agent_name = self._servicenow_agent.agent_name
+            else:
+                # Default start agent
+                start_agent_name = start_agent or self._coding_agent.agent_name
+
+            # Optionally, annotate the task for ServiceNow pre-check
+            if precheck_servicenow:
+                task = (
+                    f"Step 1: Search ServiceNow for resolved tickets similar to this issue.\n"
+                    f"If a resolved ticket exists, return the ticket number and skip further analysis.\n"
+                    f"Otherwise, continue with full analysis and ticket creation.\n\n"
+                    f"{task}"
+                )
+
+            result = self._swarm(task, start=start_agent_name)
 
             logger.info("Swarm task completed")
 
