@@ -114,3 +114,6 @@ node_modules/
 tmp/
 temp/
 *.tmp
+
+# AgentCore Deployment
+.bedrock_agentcore.yaml

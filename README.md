@@ -5,23 +5,20 @@ Multi-agent system for proactive operations management. Analyzes services, creat
 ## Architecture
 
 ```
-EventBridge (scheduled) / API Gateway
+EventBridge (scheduled) / Boto3 Client
         │
         ▼
    AgentCore Runtime
         │
         ▼
 ┌─────────────────────────────────────────────┐
-│  main.py                                     │
-│                                              │
+│  main.py                                    │
+│                                             │
 │  ├── proactive: Automated daily scan        │
 │  │   └── DataDog → Swarm → S3               │
-│  │                                           │
+│  │                                          │
 │  ├── chat: Interactive troubleshooting      │
 │  │   └── Orchestrator (session-based)       │
-│  │                                           │
-│  └── swarm: One-off task                    │
-│      └── Direct swarm execution             │
 └─────────────────────────────────────────────┘
 ```
 
@@ -61,21 +58,25 @@ curl -X POST http://localhost:8080/invocations \
 ## API Payloads
 
 ### Proactive (automated scan)
+
 ```json
 {"mode": "proactive"}
 ```
 
 ### Chat (interactive)
+
 ```json
 {"mode": "chat", "message": "Why is payment-service failing?"}
 ```
 
 With session:
+
 ```json
 {"mode": "chat", "session_id": "abc-123", "message": "Create a ticket"}
 ```
 
 ### Swarm (one-off task)
+
 ```json
 {"mode": "swarm", "task": "Analyze auth-service errors"}
 ```
@@ -83,6 +84,7 @@ With session:
 ## AWS Deployment
 
 ### Prerequisites
+
 - AWS CLI configured
 - IAM role with Bedrock, S3, CloudWatch permissions
 

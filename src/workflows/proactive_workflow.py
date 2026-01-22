@@ -205,41 +205,33 @@ class ProactiveWorkflow:
         formatted_logs: str,
     ) -> ServiceResult:
         """
-        Process a single service using the Swarm.
-
-        The Swarm coordinates agents to:
-        1. Analyze the logs (Coding Agent)
-        2. Create ticket if needed (ServiceNow Agent)
-        3. Upload report to S3 (S3 Agent)
+        Process a single service using the Swarm with ServiceNow pre-check.
         """
         start_time = datetime.now(UTC)
         logger.info(f"Processing service with Swarm: {service_name}")
 
         try:
-            # Create a fresh Swarm for this service (no DataDog needed, we have logs)
             swarm = AIOpsSwarm(include_datadog=False, include_s3=True)
 
-            # Build the task prompt
             task = f"""Analyze the following logs for service '{service_name}':
-
 {formatted_logs}
 
 Please:
-1. Identify error patterns and assess severity (critical/high/medium/low)
-2. Suggest fixes for the issues found
-3. If severity is medium or higher, create a ServiceNow ticket
-4. Upload a comprehensive report to S3 that includes:
-   - Your analysis and severity assessment
-   - Suggested fixes
-   - The ServiceNow ticket number (if one was created)
+1. First, check ServiceNow for any resolved tickets similar to this issue.
+- If found, return the ticket number and skip analysis.
+2. Identify error patterns and assess severity (critical/high/medium/low)
+3. Suggest fixes for the issues found
+4. If severity is medium or higher, create a ServiceNow ticket
+5. Upload a comprehensive report to S3 that includes:
+- Analysis & severity assessment
+- Suggested fixes
+- ServiceNow ticket number (if created)
 
 Service name: {service_name}
 """
 
-            # Run the Swarm
-            swarm_result = swarm.run(task)
+            swarm_result = swarm.run(task, precheck_servicenow=True)
 
-            # Extract results
             severity = self._extract_severity(swarm_result.output)
             ticket_number = self._extract_ticket_number(swarm_result.output)
             s3_uri = self._extract_s3_uri(swarm_result.output)

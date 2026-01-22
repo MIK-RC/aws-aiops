@@ -9,6 +9,7 @@ from ..tools.servicenow_tools import (
     ServiceNowClient,
     create_incident,
     get_incident_status,
+    search_incidents,
     update_incident,
 )
 from .base import BaseAgent
@@ -23,6 +24,7 @@ class ServiceNowAgent(BaseAgent):
     - Update existing incidents with new information
     - Track incident status
     - Ensure proper categorization and priority
+    - Search for tickets on ServiceNow (can be used as a knowledge base too).
 
     Standalone Usage:
         agent = ServiceNowAgent()
@@ -76,11 +78,7 @@ class ServiceNowAgent(BaseAgent):
 
     def get_tools(self) -> list:
         """Get the ServiceNow-specific tools."""
-        return [
-            create_incident,
-            update_incident,
-            get_incident_status,
-        ]
+        return [create_incident, update_incident, get_incident_status, search_incidents]
 
     # ==========================================
     # Direct Tool Access Methods (Standalone Use)
@@ -323,3 +321,98 @@ Create a ticket with:
 Use the create_incident tool to create the ticket."""
 
         return self.invoke(prompt)
+
+    def search_incidents(
+        self,
+        query: str = "",
+        service_name: str | None = None,
+        state: str | None = None,
+        limit: int = 5,
+        mode: str = "knowledge",
+    ) -> list[dict]:
+        """
+        Search for ServiceNow incidents programmatically.
+
+        This can be used as a knowledge base (resolved tickets)
+        or to check for duplicate active tickets before creation.
+
+        Args:
+            query: Free-text search query (e.g., issue description or keywords).
+            service_name: Optional service name to filter incidents (maps to category).
+            state: Optional incident state to filter (overrides default per mode).
+            limit: Maximum number of results to return. Defaults to 5.
+            mode: 'knowledge' for resolved/closed incidents,
+                'decision' for active tickets (to prevent duplicates).
+
+        Returns:
+            List of dictionaries with incident details:
+            - sys_id
+            - number
+            - state
+            - priority
+            - short_description
+            - assigned_to
+            - created_on
+            - updated_on
+
+            Returns empty list if no matches or on error.
+        """
+        self._logger.info(f"Searching ServiceNow tickets (mode={mode}) with query: {query[:100]}")
+
+        # Build ServiceNow query string
+        filters = []
+        if query:
+            filters.append(f"short_descriptionLIKE{query}")
+        if service_name:
+            filters.append(f"category={service_name}")
+        if state:
+            filters.append(f"state={state}")
+        else:
+            if mode == "knowledge":
+                filters.append("stateIN6,7")  # Resolved, Closed
+            elif mode == "decision":
+                filters.append("stateIN1,2,3,4,5")  # Active states
+
+        sysparm_query = "^".join(filters)
+
+        try:
+            results_raw = self._servicenow_client.search_incidents(text=sysparm_query, limit=limit)
+
+            # Standardize output
+            results = []
+            for r in results_raw:
+                results.append(
+                    {
+                        "sys_id": r.get("sys_id"),
+                        "number": r.get("number"),
+                        "state": r.get("state"),
+                        "priority": r.get("priority"),
+                        "short_description": r.get("short_description"),
+                        "assigned_to": r.get("assigned_to", {}).get("display_value", "Unassigned"),
+                        "created_on": r.get("sys_created_on"),
+                        "updated_on": r.get("sys_updated_on"),
+                    }
+                )
+
+            # Record the search action
+            self.record_action(
+                action_type="search_tickets",
+                description=f"Performed ServiceNow search ({mode})",
+                input_summary=f"Query: {query[:100]}, Service: {service_name}, State: {state}, Limit: {limit}",
+                output_summary=f"Found {len(results)} matching tickets",
+                success=True,
+            )
+
+            return results
+
+        except Exception as e:
+            self._logger.error(f"ServiceNow search failed: {e}")
+            self.record_action(
+                action_type="search_tickets",
+                description="ServiceNow search failed",
+                input_summary=f"Query: {query[:100]}, Service: {service_name}, State: {state}, Limit: {limit}",
+                output_summary=str(e),
+                success=False,
+                error_message=str(e),
+            )
+            return []

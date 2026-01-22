@@ -8,11 +8,11 @@
 datadog:
   # DataDog site (us1, us3, us5, eu1, ap1, etc.)
   site: "us5"
-  
+
   # API endpoints
   endpoints:
     logs_search: "/api/v2/logs/events/search"
-  
+
   # Query defaults
   query:
     # Default query for error/warning logs
@@ -22,7 +22,7 @@ datadog:
     # Default time range
     default_time_from: "now-1d"
     default_time_to: "now"
-  
+
   # Request settings
   request:
     timeout_seconds: 30
@@ -50,14 +50,34 @@ servicenow:
   # API endpoints
   endpoints:
     incidents: "/api/now/table/incident"
-    
+
+  # For searching ServiceNow
+  search:
+    default_limit: 5
+    default_order: ORDERBYDESCsys_updated_on
+
+    # Fields used for OR-based text search
+    searchable_fields:
+      - short_description
+      - description
+      - close_notes
+
+    # Default states by intent
+    default_states:
+      decision:
+        - New
+        - In Progress
+      knowledge:
+        - Resolved
+        - Closed
+
   # Default ticket values
   defaults:
     category: "LLM-Assisted Resolution"
     impact: "3"
     urgency: "3"
     assignment_group: ""
-    
+
   # Priority mapping (impact x urgency matrix)
   priority_mapping:
     critical:
@@ -72,7 +92,7 @@ servicenow:
     low:
       impact: "3"
       urgency: "3"
-      
+
   # Request settings
   request:
     timeout_seconds: 30
@@ -106,7 +126,7 @@ code_analysis:
       low:
         - "Info"
         - "Debug"
-        
+
   # Output settings
   output:
     # Include code snippets in suggestions
