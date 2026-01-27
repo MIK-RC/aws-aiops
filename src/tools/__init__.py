@@ -25,6 +25,7 @@ from .servicenow_tools import (
     ServiceNowClient,
     create_incident,
     get_incident_status,
+    search_incidents,
     update_incident,
 )
 
@@ -39,6 +40,7 @@ __all__ = [
     "update_incident",
     "get_incident_status",
     "ServiceNowClient",
+    "search_incidents",
     # S3 tools
     "upload_service_report",
     "upload_summary_report",
