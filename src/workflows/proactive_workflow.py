@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..agents import DataDogAgent, S3Agent
+from ..tools.msteams_tool import MSTeamsClient
 from ..utils.config_loader import load_settings
 from ..utils.logging_config import get_logger
 from .swarm_coordinator import AIOpsSwarm
@@ -37,7 +38,7 @@ class ProactiveWorkflow:
     """
     Proactive Analysis Workflow for ECS execution.
 
-    Triggered by EventBridge, this workflow:
+    Triggered by External trigger (As a Cron Job), this workflow:
     1. Fetches all services with errors/warnings from DataDog
     2. Processes each service in parallel using ThreadPoolExecutor
     3. Uses AIOpsSwarm for agent coordination per service
@@ -66,13 +67,64 @@ class ProactiveWorkflow:
         # S3 agent for summary upload
         self._s3_agent = S3Agent()
 
+        # MS Teams Client
+        self._msteams_client = MSTeamsClient()
+
         # Workflow state
         self._start_time: datetime | None = None
         self._end_time: datetime | None = None
 
         logger.info(f"Initialized ProactiveWorkflow: max_workers={self._max_workers}")
 
-    def run(self) -> dict:
+    def _upload_service_report(
+        self,
+        service_result: ServiceResult,
+        destination_sink: str = "s3",
+    ) -> None:
+        """
+        Upload or send a single service report to the specified destination.
+
+        Args:
+            service_result: ServiceResult object containing details for this service.
+            destination_sink: 's3' or 'msteams'
+        """
+        if not service_result.success:
+            return  # Skip failed services
+
+        # Generate content for the individual service report
+        content = (
+            f"# Service Report: {service_result.service_name}\n\n"
+            f"- Severity: {service_result.severity}\n"
+            f"- Ticket Number: {service_result.ticket_number or 'N/A'}\n"
+            f"- Duration: {service_result.duration_seconds:.2f} sec\n"
+            f"- Agents Used: {', '.join(service_result.agents_used) if service_result.agents_used else 'None'}\n"
+        )
+
+        if destination_sink == "s3":
+            result = self._s3_agent.upload_report(
+                service_name=service_result.service_name,
+                content=content,
+            )
+            if result.get("success"):
+                logger.info(f"Individual report uploaded to S3: {result.get('s3_uri')}")
+            else:
+                logger.error(
+                    f"Failed to upload individual report for {service_result.service_name}: {result.get('error')}"
+                )
+
+        elif destination_sink == "msteams":
+            result = self._msteams_client.send_notification(
+                agent_id=f"service-{service_result.service_name}",
+                message=content,
+            )
+            if result.get("success"):
+                logger.info(f"Individual report sent to MS Teams: {service_result.service_name}")
+            else:
+                logger.error(
+                    f"Failed to send individual report to MS Teams for {service_result.service_name}: {result.get('error')}"
+                )
+
+    def run(self, destination_sink: str) -> dict:
         """
         Execute the proactive workflow.
 
@@ -105,7 +157,7 @@ class ProactiveWorkflow:
             results = self._process_services_parallel(service_data)
 
             # Step 4: Generate and upload summary
-            self._upload_summary(results)
+            self._upload_summary(results=results, destination_sink=destination_sink)
 
             # Step 5: Build final report
             self._end_time = datetime.now(UTC)
@@ -287,15 +339,45 @@ Service name: {service_name}
         match = re.search(r"s3://[^\s]+", output)
         return match.group(0) if match else None
 
-    def _upload_summary(self, results: list[ServiceResult]) -> None:
-        """Generate and upload the summary report."""
-        summary_content = self._generate_summary(results)
-        upload_result = self._s3_agent.upload_summary(summary_content)
+    def _upload_summary(
+        self,
+        results: list[ServiceResult],
+        destination_sink: str = "s3",
+        upload_individual_reports: bool = True,
+    ) -> None:
+        """
+        Generate and upload/send the summary report.
+        Optionally upload/send individual service reports as well.
 
-        if upload_result.get("success"):
-            logger.info(f"Summary uploaded: {upload_result.get('s3_uri')}")
-        else:
-            logger.error(f"Failed to upload summary: {upload_result.get('error')}")
+        Args:
+            results: List of ServiceResult objects.
+            destination_sink: 's3' or 'msteams'
+            upload_individual_reports: Whether to send individual reports.
+        """
+        # --- Generate summary content ---
+        summary_content = self._generate_summary(results)
+
+        # --- Upload or send the summary ---
+        if destination_sink == "s3":
+            result = self._s3_agent.upload_summary(summary_content)
+            if result.get("success"):
+                logger.info(f"Summary uploaded to S3: {result.get('s3_uri')}")
+            else:
+                logger.error(f"Failed to upload summary to S3: {result.get('error')}")
+        elif destination_sink == "msteams":
+            result = self._msteams_client.send_notification(
+                agent_id="proactive-workflow",
+                message=summary_content,
+            )
+            if result.get("success"):
+                logger.info("Summary sent to MS Teams successfully")
+            else:
+                logger.error(f"Failed to send summary to MS Teams: {result.get('error')}")
+
+        # --- Optionally upload/send individual service reports ---
+        if upload_individual_reports:
+            for service_result in results:
+                self._upload_service_report(service_result, destination_sink=destination_sink)
 
     def _generate_summary(self, results: list[ServiceResult]) -> str:
         """Generate a clean summary report."""
@@ -400,7 +482,7 @@ Service name: {service_name}
         return (end - self._start_time).total_seconds()
 
 
-def run_proactive_workflow() -> dict:
+def run_proactive_workflow(destination_sink: str) -> dict:
     """
     Convenience function to run the proactive workflow.
 
@@ -408,4 +490,4 @@ def run_proactive_workflow() -> dict:
         Workflow report dictionary.
     """
     workflow = ProactiveWorkflow()
-    return workflow.run()
+    return workflow.run(destination_sink=destination_sink)

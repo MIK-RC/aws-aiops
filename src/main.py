@@ -101,7 +101,7 @@ def handle_proactive(payload: dict) -> dict:
             logger.info("=== PROACTIVE WORKFLOW STARTED ===")
             sys.stdout.flush()
 
-            result = run_proactive_workflow()
+            result = run_proactive_workflow(destination_sink=payload.get("destination_sink", "s3"))
 
             logger.info("=== PROACTIVE WORKFLOW COMPLETED ===")
             logger.info(f"Workflow result: {json.dumps(result, default=str)[:1000]}")

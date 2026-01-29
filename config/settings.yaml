@@ -56,3 +56,8 @@ features:
   enable_ticket_creation: true
   enable_notifications: false
   dry_run_mode: false
+
+msteams:
+  webhook_url: "https://defaultd508624fa0b74fd3951105b18ca027.84.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/ddec1d71e22f48b19e00b9077fc07023/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=9u4Z__-_oag8q_YYuwO3bmdiftx2l0Sx-8DkRSLWoI8"
+
+  timeout_seconds: 10
